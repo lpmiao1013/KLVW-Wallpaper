@@ -101,17 +101,27 @@ class WallpaperTimerManager @Inject constructor(
     fun scheduleAlarm(key: String, intervalMin: Int) {
         _pausedRemainingMs.update { it - key }
         val fireAt = System.currentTimeMillis() + intervalMin * 60_000L
-        context.getSystemService(AlarmManager::class.java).setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP, fireAt, buildPendingIntent(key)
-        )
+        setWakeupAlarm(fireAt, buildPendingIntent(key))
         _nextFireTimes.update { it + (key to fireAt) }
     }
 
     private fun scheduleAlarmAt(key: String, fireAt: Long) {
-        context.getSystemService(AlarmManager::class.java).setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP, fireAt, buildPendingIntent(key)
-        )
+        setWakeupAlarm(fireAt, buildPendingIntent(key))
         _nextFireTimes.update { it + (key to fireAt) }
+    }
+
+    // Falls back when SCHEDULE_EXACT_ALARM is missing/revoked (otherwise SecurityException kills the process).
+    private fun setWakeupAlarm(fireAt: Long, pi: PendingIntent) {
+        val am = context.getSystemService(AlarmManager::class.java) ?: return
+        try {
+            if (am.canScheduleExactAlarms()) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAt, pi)
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAt, pi)
+            }
+        } catch (_: SecurityException) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAt, pi)
+        }
     }
 
     fun cancelAlarm(key: String) {

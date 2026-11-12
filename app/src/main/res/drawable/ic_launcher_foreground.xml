@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!--
+      Quiet monogram: letter K only.
+      No phone, no photo stack, no landscape, no decorative flourish.
+      Kept inside adaptive safe zone.
+    -->
+
+    <!-- Soft warm disc so the mark isn’t a raw letter on black -->
+    <path
+        android:fillColor="#292524"
+        android:pathData="M54,54m-28,0a28,28 0,1 1,56 0a28,28 0,1 1,-56 0"/>
+
+    <!-- K stem -->
+    <path
+        android:fillColor="#FAFAF9"
+        android:pathData="M42,38h6.5v32H42z"/>
+
+    <!-- K upper arm -->
+    <path
+        android:fillColor="#FAFAF9"
+        android:pathData="M48.2,52.2 L66.5,38.5 L70.8,43.8 L55.8,54.5 Z"/>
+
+    <!-- K lower arm -->
+    <path
+        android:fillColor="#FAFAF9"
+        android:pathData="M53.8,52.8 L70.8,68.2 L66.2,73 L48.2,55.8 Z"/>
+
+    <!-- Single accent cut — not a second metaphor -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M48.2,52.2 L55.8,54.5 L53.8,52.8 Z"/>
+</vector>
