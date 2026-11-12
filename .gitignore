@@ -27,6 +27,11 @@ app/.cxx/
 Key
 *.jks
 *.keystore
+*.keystore.b64
+keystore.properties
+app/release.jks
+app/release.keystore
+
 
 # Release build outputs
 app/release/

@@ -3,4 +3,4 @@
     android:description="@string/wallpaper_lock_service_description"
     android:label="@string/wallpaper_lock_service_label"
     android:settingsActivity="com.klvw.wallpaper.ui.MainActivity"
-    android:thumbnail="@android:drawable/ic_menu_gallery" />
+    android:thumbnail="@drawable/ic_klvw_app" />
