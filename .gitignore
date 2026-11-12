@@ -5,9 +5,8 @@ app/build/
 *.aab
 *.aar
 
-# Gradle wrapper (keep gradlew scripts, ignore cache)
+# Gradle cache (wrapper jar MUST be committed for CI)
 .gradle/
-gradle/wrapper/gradle-wrapper.jar
 
 # Local environment — never commit
 local.properties
