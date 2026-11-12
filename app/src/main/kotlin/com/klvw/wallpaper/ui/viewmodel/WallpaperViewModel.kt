@@ -35,6 +35,9 @@ data class WallpaperUiState(
     val imageFolders: List<FolderEntity> = emptyList(),
     val videoFolders: List<FolderEntity> = emptyList(),
     val useVulkan: Boolean = true,
+    val wallpaperScaleMode: String = "fill",
+    val rotateMismatchEnabled: Boolean = false,
+    val rotateMismatchCw: Boolean = true,
     val forceIconColor: String = "auto",
     val tileRandomImageTarget: String = "both",
     val tileRandomVideoTarget: String = "both",
@@ -89,6 +92,24 @@ class WallpaperViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.forceIconColor.collect { color ->
                 _state.update { it.copy(forceIconColor = color) }
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                prefs.wallpaperScaleMode,
+                prefs.rotateMismatchEnabled,
+                prefs.rotateMismatchCw
+            ) { scale, rotateEn, rotateCw ->
+                Triple(scale, rotateEn, rotateCw)
+            }.collect { (scale, rotateEn, rotateCw) ->
+                _state.update {
+                    it.copy(
+                        wallpaperScaleMode = scale,
+                        rotateMismatchEnabled = rotateEn,
+                        rotateMismatchCw = rotateCw
+                    )
+                }
             }
         }
 
@@ -247,6 +268,18 @@ class WallpaperViewModel @Inject constructor(
 
     fun setUseVulkan(enabled: Boolean) {
         viewModelScope.launch { prefs.setUseVulkan(enabled) }
+    }
+
+    fun setWallpaperScaleMode(value: String) {
+        viewModelScope.launch { prefs.setWallpaperScaleMode(value) }
+    }
+
+    fun setRotateMismatchEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setRotateMismatchEnabled(enabled) }
+    }
+
+    fun setRotateMismatchCw(clockwise: Boolean) {
+        viewModelScope.launch { prefs.setRotateMismatchCw(clockwise) }
     }
 
     fun setForceIconColor(value: String) {

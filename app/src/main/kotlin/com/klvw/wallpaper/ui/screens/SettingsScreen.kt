@@ -13,6 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -80,6 +84,10 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
                     cacheCleared = true
                 }
             )
+        }
+
+        SettingsSection(title = "壁纸显示") {
+            WallpaperDisplaySection(viewModel = viewModel)
         }
 
         SettingsSection(title = "状态栏图标") {
@@ -143,9 +151,9 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
         }
 
         SettingsSection(title = "壁纸定时器") {
+            TimerControlSettingsSection(popupViewModel = popupViewModel)
             TimerNotificationSection(popupViewModel = popupViewModel)
             TimerGlobalOffSection(popupViewModel = popupViewModel)
-            TimerPauseOnLockSection(popupViewModel = popupViewModel)
         }
 
         SettingsSection(title = "KLVW 手表") {
@@ -1130,12 +1138,67 @@ private fun TimerGlobalOffSection(popupViewModel: KLVWPopupViewModel) {
     }
 }
 
+private val SETTINGS_TIMER_INTERVALS = listOf(5, 10, 15, 30, 45, 60, 120, 240, 480, 1440)
+
+private fun settingsMinuteLabel(min: Int): String =
+    if (min < 60) "${min} 分钟" else "${min / 60} 小时"
+
+private fun settingsFormatCountdown(remainingMs: Long): String {
+    if (remainingMs <= 0L) return "即将切换"
+    val totalSec = remainingMs / 1000
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return when {
+        h > 0 -> "%d:%02d:%02d".format(h, m, s)
+        else -> "%d:%02d".format(m, s)
+    }
+}
+
+private data class SettingsTimerRow(
+    val key: String,
+    val label: String,
+    val enabled: Boolean,
+    val intervalMin: Int
+)
+
 @Composable
-private fun TimerPauseOnLockSection(popupViewModel: KLVWPopupViewModel) {
-    val homeImage by popupViewModel.homeImageTimerPauseOnLock.collectAsStateWithLifecycle()
-    val homeVideo by popupViewModel.homeVideoTimerPauseOnLock.collectAsStateWithLifecycle()
-    val lockImage by popupViewModel.lockImageTimerPauseOnLock.collectAsStateWithLifecycle()
-    val lockVideo by popupViewModel.lockVideoTimerPauseOnLock.collectAsStateWithLifecycle()
+private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
+    val homeImageEnabled by popupViewModel.homeImageTimerEnabled.collectAsStateWithLifecycle()
+    val homeImageInterval by popupViewModel.homeImageTimerIntervalMin.collectAsStateWithLifecycle()
+    val homeVideoEnabled by popupViewModel.homeVideoTimerEnabled.collectAsStateWithLifecycle()
+    val homeVideoInterval by popupViewModel.homeVideoTimerIntervalMin.collectAsStateWithLifecycle()
+    val lockImageEnabled by popupViewModel.lockImageTimerEnabled.collectAsStateWithLifecycle()
+    val lockImageInterval by popupViewModel.lockImageTimerIntervalMin.collectAsStateWithLifecycle()
+    val lockVideoEnabled by popupViewModel.lockVideoTimerEnabled.collectAsStateWithLifecycle()
+    val lockVideoInterval by popupViewModel.lockVideoTimerIntervalMin.collectAsStateWithLifecycle()
+    val homeImagePol by popupViewModel.homeImageTimerPauseOnLock.collectAsStateWithLifecycle()
+    val homeVideoPol by popupViewModel.homeVideoTimerPauseOnLock.collectAsStateWithLifecycle()
+    val lockImagePol by popupViewModel.lockImageTimerPauseOnLock.collectAsStateWithLifecycle()
+    val lockVideoPol by popupViewModel.lockVideoTimerPauseOnLock.collectAsStateWithLifecycle()
+    val timerPaused by popupViewModel.timerPaused.collectAsStateWithLifecycle()
+    val nextFireTimes by popupViewModel.timerNextFireTimes.collectAsStateWithLifecycle()
+
+    val timers = listOf(
+        SettingsTimerRow("home_image", "桌面图片", homeImageEnabled, homeImageInterval),
+        SettingsTimerRow("home_video", "桌面视频", homeVideoEnabled, homeVideoInterval),
+        SettingsTimerRow("lock_image", "锁屏图片", lockImageEnabled, lockImageInterval),
+        SettingsTimerRow("lock_video", "锁屏视频", lockVideoEnabled, lockVideoInterval)
+    )
+    val pauseOnLock = mapOf(
+        "home_image" to homeImagePol,
+        "home_video" to homeVideoPol,
+        "lock_image" to lockImagePol,
+        "lock_video" to lockVideoPol
+    )
+
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            now = System.currentTimeMillis()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1143,50 +1206,239 @@ private fun TimerPauseOnLockSection(popupViewModel: KLVWPopupViewModel) {
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(22.dp),
-                tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text("锁屏暂停 (P.o.L)", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "分别开关桌面/锁屏的图片与视频定时，并设置间隔。无需再打开弹层 Timer Control。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        val activeTimers = timers.filter { it.enabled }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text("运行状态", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (activeTimers.isEmpty()) {
                 Text(
-                    "锁屏时，已开启的定时器可自动暂停（倒计时冻结，解锁后继续）。" +
-                    "and resume when you unlock.",
+                    "当前没有开启的定时器",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            } else {
+                activeTimers.forEach { row ->
+                    val paused = timerPaused[row.key] == true
+                    val fireAt = nextFireTimes[row.key]
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(row.label, style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f))
+                        when {
+                            paused -> Text(
+                                "已暂停",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            fireAt != null -> Text(
+                                "${settingsFormatCountdown(fireAt - now)} 后",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             }
         }
-        listOf(
-            "home_image" to "桌面图片",
-            "home_video" to "桌面视频",
-            "lock_image" to "锁屏图片",
-            "lock_video" to "锁屏视频"
-        ).forEach { (key, label) ->
-            val checked = when (key) {
-                "home_image" -> homeImage
-                "home_video" -> homeVideo
-                "lock_image" -> lockImage
-                else         -> lockVideo
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+
+        timers.forEach { row ->
+            val paused = timerPaused[row.key] == true
+            val listState = rememberLazyListState()
+            val selectedIndex = SETTINGS_TIMER_INTERVALS.indexOf(row.intervalMin).coerceAtLeast(0)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = checked,
-                    onCheckedChange = { popupViewModel.setTimerPauseOnLock(key, it) },
-                    modifier = Modifier.height(24.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(row.label, style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f))
+                    if (row.enabled && paused) {
+                        Text(
+                            "已暂停",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    }
+                    if (row.enabled) {
+                        IconButton(
+                            onClick = {
+                                if (paused) popupViewModel.resumeTimer(row.key)
+                                else popupViewModel.pauseTimer(row.key)
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                if (paused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                contentDescription = if (paused) "继续" else "暂停",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = row.enabled,
+                        onCheckedChange = { popupViewModel.setTimerEnabled(row.key, it) },
+                        modifier = Modifier.height(24.dp)
+                    )
+                }
+                if (row.enabled) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val density = LocalDensity.current
+                        val viewportPx = with(density) { maxWidth.toPx() }
+                        val chipHalfPx = with(density) { 36.dp.toPx() }
+                        LaunchedEffect(selectedIndex) {
+                            listState.animateScrollToItem(
+                                selectedIndex,
+                                scrollOffset = -(viewportPx / 2 - chipHalfPx).toInt()
+                            )
+                        }
+                        LazyRow(
+                            state = listState,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp)
+                        ) {
+                            lazyItems(SETTINGS_TIMER_INTERVALS) { min ->
+                                FilterChip(
+                                    selected = row.intervalMin == min,
+                                    onClick = { popupViewModel.setTimerInterval(row.key, min) },
+                                    label = {
+                                        Text(
+                                            settingsMinuteLabel(min),
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "锁屏时暂停",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = pauseOnLock[row.key] == true,
+                            onCheckedChange = { popupViewModel.setTimerPauseOnLock(row.key, it) },
+                            modifier = Modifier.height(20.dp)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun WallpaperDisplaySection(viewModel: WallpaperViewModel) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("适应模式", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "图片与视频均生效。填充：裁切铺满；适应：完整显示可留黑边；拉伸：强制铺满（视频近似为填充）。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    "fill" to "填充",
+                    "fit" to "适应",
+                    "stretch" to "拉伸"
+                ).forEach { (value, label) ->
+                    FilterChip(
+                        selected = state.wallpaperScaleMode == value,
+                        onClick = { viewModel.setWallpaperScaleMode(value) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(thickness = 0.5.dp)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("自动旋转适配", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "方向与屏幕不一致时自动旋转。图片会真正旋转 90°；视频受系统限制，按适应/填充缩放处理。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = state.rotateMismatchEnabled,
+                onCheckedChange = { viewModel.setRotateMismatchEnabled(it) },
+                modifier = Modifier.height(24.dp)
+            )
+        }
+
+        if (state.rotateMismatchEnabled) {
+            Text("旋转方向", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = state.rotateMismatchCw,
+                    onClick = { viewModel.setRotateMismatchCw(true) },
+                    label = { Text("顺时针") }
+                )
+                FilterChip(
+                    selected = !state.rotateMismatchCw,
+                    onClick = { viewModel.setRotateMismatchCw(false) },
+                    label = { Text("逆时针") }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {

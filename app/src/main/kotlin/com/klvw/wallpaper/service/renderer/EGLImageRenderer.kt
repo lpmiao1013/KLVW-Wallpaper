@@ -13,6 +13,7 @@ import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.view.Surface
 import android.view.SurfaceHolder
+import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.util.DisplayUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -21,7 +22,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.coroutines.coroutineContext
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 /** Renders static images via OpenGL ES 2.0 for GPU-accelerated display on the wallpaper surface. */
 class EGLImageRenderer(
@@ -39,11 +39,25 @@ class EGLImageRenderer(
     private var hasTexture = false
     private var lastSurface: Surface? = null
 
-    suspend fun load(uri: Uri, holder: SurfaceHolder) {
+    suspend fun load(
+        uri: Uri,
+        holder: SurfaceHolder,
+        scaleMode: WallpaperScaleMode = WallpaperScaleMode.FILL,
+        rotateMismatchEnabled: Boolean = false,
+        rotateMismatchCw: Boolean = true
+    ) {
         val metrics = displayUtils.getScreenMetrics()
         val bmp = withContext(Dispatchers.IO) {
-            decodeBitmap(uri, metrics.widthPx, metrics.heightPx)
-                ?.let { centerCrop(it, metrics.widthPx, metrics.heightPx) }
+            val decoded = decodeBitmap(uri, metrics.widthPx, metrics.heightPx) ?: return@withContext null
+            val rotate = if (WallpaperLayout.shouldAutoRotate(
+                    decoded.width, decoded.height, metrics.widthPx, metrics.heightPx, rotateMismatchEnabled
+                )
+            ) rotateMismatchCw else null
+            WallpaperLayout.layoutToScreen(
+                decoded, metrics.widthPx, metrics.heightPx, scaleMode, rotate
+            ).also {
+                if (it !== decoded) decoded.recycle()
+            }
         }
         coroutineContext.ensureActive()
         if (bmp != null) {
@@ -117,7 +131,7 @@ class EGLImageRenderer(
     }
 
     private fun draw() {
-        // full-screen quad: NDC position + UV (V-flipped so bitmap top maps to screen top)
+        // Screen-sized bitmap already includes letterboxing; always draw full-screen.
         val v = floatArrayOf(
             -1f, -1f, 0f, 1f,
              1f, -1f, 1f, 1f,
@@ -127,6 +141,8 @@ class EGLImageRenderer(
         val buf = ByteBuffer.allocateDirect(v.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         buf.put(v)
 
+        GLES20.glClearColor(0f, 0f, 0f, 1f)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glUseProgram(prog)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, tex[0])
@@ -185,24 +201,13 @@ class EGLImageRenderer(
         return try {
             val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
-            opts.inSampleSize = calcSampleSize(opts.outWidth, opts.outHeight, targetW, targetH)
+            // Decode a bit larger than screen so FIT/FILL still look sharp after rotate.
+            val decodeTarget = max(targetW, targetH)
+            opts.inSampleSize = calcSampleSize(opts.outWidth, opts.outHeight, decodeTarget, decodeTarget)
             opts.inJustDecodeBounds = false
             opts.inPreferredConfig = Bitmap.Config.ARGB_8888
             context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
         } catch (_: Exception) { null }
-    }
-
-    private fun centerCrop(bmp: Bitmap, screenW: Int, screenH: Int): Bitmap {
-        val scale = max(screenW.toFloat() / bmp.width, screenH.toFloat() / bmp.height)
-        val sw = (bmp.width * scale).roundToInt()
-        val sh = (bmp.height * scale).roundToInt()
-        val scaled = Bitmap.createScaledBitmap(bmp, sw, sh, true)
-        if (scaled !== bmp) bmp.recycle()
-        val x = ((sw - screenW) / 2).coerceAtLeast(0)
-        val y = ((sh - screenH) / 2).coerceAtLeast(0)
-        val cropped = Bitmap.createBitmap(scaled, x, y, screenW.coerceAtMost(scaled.width), screenH.coerceAtMost(scaled.height))
-        if (cropped !== scaled) scaled.recycle()
-        return cropped
     }
 
     private fun calcSampleSize(sw: Int, sh: Int, dw: Int, dh: Int): Int {

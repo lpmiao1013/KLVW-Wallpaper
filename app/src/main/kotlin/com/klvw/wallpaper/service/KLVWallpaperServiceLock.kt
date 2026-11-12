@@ -12,6 +12,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
+import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.service.renderer.EGLImageRenderer
 import com.klvw.wallpaper.service.renderer.VideoRenderer
@@ -22,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -140,19 +142,31 @@ class KLVWallpaperServiceLock : WallpaperService() {
         private fun startCollecting(holder: SurfaceHolder) {
             collectorJob?.cancel()
             collectorJob = scope.launch {
-                prefs.lockWallpaperState.collect { (uri, isVid) ->
+                combine(
+                    prefs.lockWallpaperState,
+                    prefs.wallpaperScaleMode,
+                    prefs.rotateMismatchEnabled,
+                    prefs.rotateMismatchCw
+                ) { state, scale, rotateEn, rotateCw ->
+                    Quad(state.first, state.second, scale, rotateEn, rotateCw)
+                }.collect { q ->
                     try {
                         release()
-                        if (uri == null) return@collect
-                        isVideo = isVid
-                        if (isVid) {
-                            videoRenderer = VideoRenderer(applicationContext)
-                            videoRenderer!!.load(Uri.parse(uri), holder)
+                        val uri = q.uri ?: return@collect
+                        isVideo = q.isVideo
+                        val mode = WallpaperScaleMode.fromPref(q.scale)
+                        if (q.isVideo) {
+                            videoRenderer = VideoRenderer(applicationContext, displayUtils)
+                            videoRenderer!!.load(
+                                Uri.parse(uri), holder, mode, q.rotateEn, q.rotateCw
+                            )
                         } else {
                             imageRenderer = EGLImageRenderer(applicationContext, displayUtils)
-                            imageRenderer!!.load(Uri.parse(uri), holder)
+                            imageRenderer!!.load(
+                                Uri.parse(uri), holder, mode, q.rotateEn, q.rotateCw
+                            )
                         }
-                        loadColorsAsync(Uri.parse(uri), isVid)
+                        loadColorsAsync(Uri.parse(uri), q.isVideo)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (_: Throwable) {
@@ -161,6 +175,14 @@ class KLVWallpaperServiceLock : WallpaperService() {
                 }
             }
         }
+
+        private data class Quad(
+            val uri: String?,
+            val isVideo: Boolean,
+            val scale: String,
+            val rotateEn: Boolean,
+            val rotateCw: Boolean
+        )
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)

@@ -30,6 +30,9 @@ class SettingsPreferences @Inject constructor(
         val HOME_IS_VIDEO = booleanPreferencesKey("home_is_video")
         val LOCK_IS_VIDEO = booleanPreferencesKey("lock_is_video")
         val USE_VULKAN = booleanPreferencesKey("use_vulkan")
+        val WALLPAPER_SCALE_MODE = stringPreferencesKey("wallpaper_scale_mode")
+        val ROTATE_MISMATCH_ENABLED = booleanPreferencesKey("rotate_mismatch_enabled")
+        val ROTATE_MISMATCH_CW = booleanPreferencesKey("rotate_mismatch_cw")
         val ACTIVE_IMAGE_FOLDER_URI = stringPreferencesKey("active_image_folder_uri")
         val ACTIVE_VIDEO_FOLDER_URI = stringPreferencesKey("active_video_folder_uri")
         val LOCK_SERVICE_ACTIVATED = booleanPreferencesKey("lock_service_activated")
@@ -120,6 +123,18 @@ class SettingsPreferences @Inject constructor(
     val homeIsVideo: Flow<Boolean> = context.dataStore.data.map { it[Keys.HOME_IS_VIDEO] ?: false }.distinctUntilChanged()
     val lockIsVideo: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_IS_VIDEO] ?: false }.distinctUntilChanged()
     val useVulkan: Flow<Boolean> = context.dataStore.data.map { it[Keys.USE_VULKAN] ?: true }.distinctUntilChanged()
+    /** fill | fit | stretch — default fill (legacy behavior). */
+    val wallpaperScaleMode: Flow<String> = context.dataStore.data
+        .map { it[Keys.WALLPAPER_SCALE_MODE] ?: "fill" }
+        .distinctUntilChanged()
+    /** When true, rotate media 90° if its orientation mismatches the screen. */
+    val rotateMismatchEnabled: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.ROTATE_MISMATCH_ENABLED] ?: false }
+        .distinctUntilChanged()
+    /** true = clockwise, false = counter-clockwise. */
+    val rotateMismatchCw: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.ROTATE_MISMATCH_CW] ?: true }
+        .distinctUntilChanged()
     val lockServiceActivated: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_SERVICE_ACTIVATED] ?: false }.distinctUntilChanged()
     val activeImageFolderUri: Flow<String?> = context.dataStore.data.map { it[Keys.ACTIVE_IMAGE_FOLDER_URI] }.distinctUntilChanged()
     val activeVideoFolderUri: Flow<String?> = context.dataStore.data.map { it[Keys.ACTIVE_VIDEO_FOLDER_URI] }.distinctUntilChanged()
@@ -261,6 +276,18 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setUseVulkan(enabled: Boolean) {
         context.dataStore.edit { it[Keys.USE_VULKAN] = enabled }
+    }
+
+    suspend fun setWallpaperScaleMode(value: String) {
+        context.dataStore.edit { it[Keys.WALLPAPER_SCALE_MODE] = value }
+    }
+
+    suspend fun setRotateMismatchEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.ROTATE_MISMATCH_ENABLED] = enabled }
+    }
+
+    suspend fun setRotateMismatchCw(clockwise: Boolean) {
+        context.dataStore.edit { it[Keys.ROTATE_MISMATCH_CW] = clockwise }
     }
 
     suspend fun setActiveImageFolder(uri: String?) {
