@@ -10,10 +10,18 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
+import android.view.MotionEvent
 import android.view.SurfaceHolder
+import android.view.ViewConfiguration
+import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperScaleMode
+import com.klvw.wallpaper.data.model.WallpaperTarget
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
+import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
+import com.klvw.wallpaper.data.repository.FolderRepository
+import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.service.renderer.EGLImageRenderer
 import com.klvw.wallpaper.service.renderer.VideoRenderer
 import com.klvw.wallpaper.util.DisplayUtils
@@ -24,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -41,6 +50,9 @@ class KLVWallpaperService : WallpaperService() {
 
     @Inject lateinit var prefs: SettingsPreferences
     @Inject lateinit var displayUtils: DisplayUtils
+    @Inject lateinit var folderRepository: FolderRepository
+    @Inject lateinit var wallpaperRepository: WallpaperRepository
+    @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
 
     override fun onCreateEngine(): Engine = KLVWallpaperEngine()
 
@@ -53,6 +65,12 @@ class KLVWallpaperService : WallpaperService() {
         private var isVideo = false
         private var forceIconColor: String = "auto"
         private var computedWallpaperColors: WallpaperColors? = null
+        private var lastTapUptimeMs = 0L
+        private var advanceJob: Job? = null
+
+        init {
+            setTouchEventsEnabled(true)
+        }
 
         private val screenOffReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
@@ -192,6 +210,38 @@ class KLVWallpaperService : WallpaperService() {
             }
         }
 
+        override fun onTouchEvent(event: MotionEvent) {
+            if (event.actionMasked != MotionEvent.ACTION_UP) return
+            val now = SystemClock.uptimeMillis()
+            val timeout = ViewConfiguration.getDoubleTapTimeout().toLong()
+            if (lastTapUptimeMs > 0L && now - lastTapUptimeMs <= timeout) {
+                lastTapUptimeMs = 0L
+                advanceByDoubleTap()
+            } else {
+                lastTapUptimeMs = now
+            }
+        }
+
+        private fun advanceByDoubleTap() {
+            if (advanceJob?.isActive == true) return
+            val useVideo = isVideo
+            advanceJob = scope.launch(Dispatchers.IO) {
+                try {
+                    if (!prefs.appEnabled.first() || !prefs.doubleTapEnabled.first()) return@launch
+                    val type = if (useVideo) FolderType.VIDEO else FolderType.IMAGE
+                    val folderUri = if (useVideo) {
+                        prefs.defaultHomeVideoFolderUri.first()
+                    } else {
+                        prefs.defaultHomeImageFolderUri.first()
+                    } ?: return@launch
+                    val items = folderRepository.getItemsFromFolder(folderUri, type)
+                    val item = shuffleHistoryManager.pickNext(items, folderUri, type) ?: return@launch
+                    wallpaperRepository.setWallpaper(item, WallpaperTarget.HOME)
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             super.onSurfaceDestroyed(holder)
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
@@ -206,6 +256,8 @@ class KLVWallpaperService : WallpaperService() {
         override fun onDestroy() {
             super.onDestroy()
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
+            advanceJob?.cancel()
+            advanceJob = null
             collectorJob?.cancel()
             collectorJob = null
             colorJob?.cancel()

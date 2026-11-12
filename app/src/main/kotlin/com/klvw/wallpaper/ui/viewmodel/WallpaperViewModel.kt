@@ -38,6 +38,7 @@ data class WallpaperUiState(
     val wallpaperScaleMode: String = "fill",
     val rotateMismatchEnabled: Boolean = false,
     val rotateMismatchCw: Boolean = true,
+    val doubleTapEnabled: Boolean = false,
     val forceIconColor: String = "auto",
     val tileRandomImageTarget: String = "both",
     val tileRandomVideoTarget: String = "both",
@@ -92,6 +93,12 @@ class WallpaperViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.forceIconColor.collect { color ->
                 _state.update { it.copy(forceIconColor = color) }
+            }
+        }
+
+        viewModelScope.launch {
+            prefs.doubleTapEnabled.collect { enabled ->
+                _state.update { it.copy(doubleTapEnabled = enabled) }
             }
         }
 
@@ -280,6 +287,10 @@ class WallpaperViewModel @Inject constructor(
 
     fun setRotateMismatchCw(clockwise: Boolean) {
         viewModelScope.launch { prefs.setRotateMismatchCw(clockwise) }
+    }
+
+    fun setDoubleTapEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setDoubleTapEnabled(enabled) }
     }
 
     fun setForceIconColor(value: String) {

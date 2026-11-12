@@ -90,6 +90,16 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             WallpaperDisplaySection(viewModel = viewModel)
         }
 
+        SettingsSection(title = "壁纸手势") {
+            SettingToggle(
+                icon = Icons.Default.TouchApp,
+                title = "双击桌面切换壁纸",
+                subtitle = "需已启用 KLVW 动态壁纸；按当前桌面图/视频类型，从对应默认文件夹轮换。部分桌面可能拦截触摸。",
+                checked = state.doubleTapEnabled,
+                onCheckedChange = { viewModel.setDoubleTapEnabled(it) }
+            )
+        }
+
         SettingsSection(title = "状态栏图标") {
             Row(
                 modifier = Modifier

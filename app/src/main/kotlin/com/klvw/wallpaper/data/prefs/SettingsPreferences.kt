@@ -76,6 +76,8 @@ class SettingsPreferences @Inject constructor(
         val QUICK_SET_HOME_STATIC_URI = stringPreferencesKey("quick_set_home_static_uri")
         val QUICK_SET_LOCK_STATIC_URI = stringPreferencesKey("quick_set_lock_static_uri")
         val QUICK_SET_WATCH_PRESET_ID = stringPreferencesKey("quick_set_watch_preset_id")
+        // Double-tap on home live wallpaper to advance
+        val DOUBLE_TAP_ENABLED = booleanPreferencesKey("double_tap_enabled")
         // Display Control (on-unlock wallpaper cycling)
         val DISPLAY_CONTROL_HOME_IMAGE = booleanPreferencesKey("display_control_home_image")
         val DISPLAY_CONTROL_HOME_VIDEO = booleanPreferencesKey("display_control_home_video")
@@ -170,6 +172,7 @@ class SettingsPreferences @Inject constructor(
     val popupScaleFolderSelect: Flow<Boolean> = context.dataStore.data.map { it[Keys.POPUP_SCALE_FOLDER_SELECT] ?: true }.distinctUntilChanged()
     val popupScaleTimer: Flow<Boolean> = context.dataStore.data.map { it[Keys.POPUP_SCALE_TIMER] ?: true }.distinctUntilChanged()
     val popupScaleFolderSelectAll: Flow<Boolean> = context.dataStore.data.map { it[Keys.POPUP_SCALE_FOLDER_SELECT_ALL] ?: true }.distinctUntilChanged()
+    val doubleTapEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.DOUBLE_TAP_ENABLED] ?: false }.distinctUntilChanged()
     val displayControlHomeImage: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_HOME_IMAGE] ?: false }.distinctUntilChanged()
     val displayControlHomeVideo: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_HOME_VIDEO] ?: false }.distinctUntilChanged()
     val displayControlLockImage: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] ?: false }.distinctUntilChanged()
@@ -430,6 +433,10 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setPopupScaleFolderSelectAll(enabled: Boolean) {
         context.dataStore.edit { it[Keys.POPUP_SCALE_FOLDER_SELECT_ALL] = enabled }
+    }
+
+    suspend fun setDoubleTapEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.DOUBLE_TAP_ENABLED] = enabled }
     }
 
     suspend fun setDisplayControlResetHomeTimer(enabled: Boolean) {
