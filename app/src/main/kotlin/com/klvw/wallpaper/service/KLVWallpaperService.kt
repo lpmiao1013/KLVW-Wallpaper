@@ -28,6 +28,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+private data class HomeCollectQuad(
+    val uri: String?,
+    val isVideo: Boolean,
+    val scale: String,
+    val rotateEn: Boolean,
+    val rotateCw: Boolean
+)
+
 @AndroidEntryPoint
 class KLVWallpaperService : WallpaperService() {
 
@@ -144,7 +152,7 @@ class KLVWallpaperService : WallpaperService() {
                     prefs.rotateMismatchEnabled,
                     prefs.rotateMismatchCw
                 ) { state, scale, rotateEn, rotateCw ->
-                    Quad(state.first, state.second, scale, rotateEn, rotateCw)
+                    HomeCollectQuad(state.first, state.second, scale, rotateEn, rotateCw)
                 }.collect { q ->
                     try {
                         release()
@@ -171,14 +179,6 @@ class KLVWallpaperService : WallpaperService() {
                 }
             }
         }
-
-        private data class Quad(
-            val uri: String?,
-            val isVideo: Boolean,
-            val scale: String,
-            val rotateEn: Boolean,
-            val rotateCw: Boolean
-        )
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)
