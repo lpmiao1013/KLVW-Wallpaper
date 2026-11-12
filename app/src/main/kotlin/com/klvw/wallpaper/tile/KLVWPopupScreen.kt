@@ -169,14 +169,14 @@ fun KLVWPopupScreen(
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(onClick = onDismiss) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = primaryTextColor)
+                            Icon(Icons.Default.Close, contentDescription = "关闭", tint = primaryTextColor)
                         }
                     }
                     HorizontalDivider()
 
                     if (items.isEmpty()) {
                         Text(
-                            "No actions configured — open Settings to add items",
+                            "尚未配置动作 — 打开设置添加项目",
                             style = MaterialTheme.typography.bodySmall,
                             color = secondaryTextColor,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
@@ -244,14 +244,14 @@ fun KLVWPopupScreen(
                 ) {
                     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "Select ${item.mediaType.replaceFirstChar { it.uppercase() }} Folder (${item.target.replaceFirstChar { it.uppercase() }})",
+                            "选择${when (item.mediaType.lowercase()) { "video" -> "视频"; else -> "图片" }}文件夹（${when (item.target.lowercase()) { "lock" -> "锁屏"; "both" -> "两者"; else -> "桌面" }}）",
                             style = MaterialTheme.typography.titleMedium,
                             color = primaryTextColor
                         )
                         Spacer(Modifier.height(4.dp))
                         if (folders.isEmpty()) {
                             Text(
-                                "No folders saved. Add folders in the app first.",
+                                "还没有保存文件夹。请先在应用中添加文件夹。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = secondaryTextColor
                             )
@@ -291,9 +291,9 @@ fun KLVWPopupScreen(
                         .clickable(enabled = false, onClick = {})
                 ) {
                     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Icon Color", style = MaterialTheme.typography.titleMedium, color = primaryTextColor)
+                        Text("图标颜色", style = MaterialTheme.typography.titleMedium, color = primaryTextColor)
                         Spacer(Modifier.height(4.dp))
-                        listOf("auto" to "Auto", "dark" to "Dark Icons", "light" to "Light Icons")
+                        listOf("auto" to "自动", "dark" to "深色图标", "light" to "浅色图标")
                             .forEach { (v, label) ->
                                 TextButton(
                                     onClick = {
@@ -477,13 +477,13 @@ private fun FolderManagerOverlay(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Default Folders",
+                        "默认文件夹",
                         style = MaterialTheme.typography.titleMedium,
                         color = primaryTextColor,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = primaryTextColor)
+                        Icon(Icons.Default.Close, contentDescription = "关闭", tint = primaryTextColor)
                     }
                 }
                 HorizontalDivider()
@@ -493,7 +493,7 @@ private fun FolderManagerOverlay(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf("home" to "Home", "lock" to "Lock").forEach { (v, lbl) ->
+                    listOf("home" to "桌面", "lock" to "锁屏").forEach { (v, lbl) ->
                         FilterChip(
                             selected = selectedTarget == v,
                             onClick = { selectedTarget = v },
@@ -501,7 +501,7 @@ private fun FolderManagerOverlay(
                         )
                     }
                     Spacer(Modifier.width(2.dp))
-                    listOf("image" to "Image", "video" to "Video").forEach { (v, lbl) ->
+                    listOf("image" to "图片", "video" to "视频").forEach { (v, lbl) ->
                         FilterChip(
                             selected = selectedMediaType == v,
                             onClick = { selectedMediaType = v },
@@ -515,7 +515,7 @@ private fun FolderManagerOverlay(
                 // Folder list
                 if (folders.isEmpty()) {
                     Text(
-                        "No ${selectedMediaType} folders saved. Add folders in the app first.",
+                        "还没有保存${selectedMediaType}文件夹。请先在应用中添加。",
                         style = MaterialTheme.typography.bodySmall,
                         color = secondaryTextColor
                     )
@@ -602,10 +602,10 @@ private fun TimerControlOverlay(
     onDismiss: () -> Unit
 ) {
     val timers = listOf(
-        TimerRow("home_image", "Home Image", homeImageEnabled, homeImageIntervalMin),
-        TimerRow("home_video", "Home Video", homeVideoEnabled, homeVideoIntervalMin),
-        TimerRow("lock_image", "Lock Image", lockImageEnabled, lockImageIntervalMin),
-        TimerRow("lock_video", "Lock Video", lockVideoEnabled, lockVideoIntervalMin)
+        TimerRow("home_image", "桌面图片", homeImageEnabled, homeImageIntervalMin),
+        TimerRow("home_video", "桌面视频", homeVideoEnabled, homeVideoIntervalMin),
+        TimerRow("lock_image", "锁屏图片", lockImageEnabled, lockImageIntervalMin),
+        TimerRow("lock_video", "锁屏视频", lockVideoEnabled, lockVideoIntervalMin)
     )
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -636,13 +636,13 @@ private fun TimerControlOverlay(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Wallpaper Timers",
+                        "壁纸定时器",
                         style = MaterialTheme.typography.titleMedium,
                         color = primaryTextColor,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = primaryTextColor)
+                        Icon(Icons.Default.Close, contentDescription = "关闭", tint = primaryTextColor)
                     }
                 }
                 val activeTimers = timers.filter { it.enabled }
@@ -656,7 +656,7 @@ private fun TimerControlOverlay(
                     ) {
                         if (activeTimers.isEmpty()) {
                             Text(
-                                "No timers running",
+                                "没有运行中的定时器",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = secondaryTextColor
                             )
@@ -676,13 +676,13 @@ private fun TimerControlOverlay(
                                     )
                                     if (paused) {
                                         Text(
-                                            "Paused",
+                                            "已暂停",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.error
                                         )
                                     } else if (fireAt != null) {
                                         Text(
-                                            "in ${formatCountdown(fireAt - now)}",
+                                            "${formatCountdown(fireAt - now)} 后",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.primary
                                         )
@@ -718,7 +718,7 @@ private fun TimerControlOverlay(
                                 )
                                 if (row.enabled && paused) {
                                     Text(
-                                        "Paused",
+                                        "已暂停",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.padding(end = 8.dp)
@@ -731,7 +731,7 @@ private fun TimerControlOverlay(
                                     ) {
                                         Icon(
                                             if (paused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                            contentDescription = if (paused) "Resume" else "Pause",
+                                            contentDescription = if (paused) "继续" else "暂停",
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -785,7 +785,7 @@ private fun TimerControlOverlay(
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        "Pause on lock",
+                                        "锁屏时暂停",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = secondaryTextColor,
                                         modifier = Modifier.weight(1f)
@@ -803,7 +803,7 @@ private fun TimerControlOverlay(
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
-                ) { Text("Close", color = secondaryTextColor) }
+                ) { Text("关闭", color = secondaryTextColor) }
             }
         }
     }
@@ -890,19 +890,19 @@ private fun FileSelectOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Select Wallpaper",
+                        "选择壁纸",
                         style = MaterialTheme.typography.titleMedium,
                         color = primaryTextColor,
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(onClick = { showOptions = !showOptions }) {
                         Text(
-                            if (showOptions) "Done" else "Options",
+                            if (showOptions) "完成" else "Options",
                             style = MaterialTheme.typography.labelMedium
                         )
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = primaryTextColor)
+                        Icon(Icons.Default.Close, contentDescription = "关闭", tint = primaryTextColor)
                     }
                 }
 
@@ -922,7 +922,7 @@ private fun FileSelectOverlay(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                listOf("home" to "Home", "lock" to "Lock", "both" to "Both").forEach { (v, lbl) ->
+                                listOf("home" to "桌面", "lock" to "锁屏", "both" to "两者").forEach { (v, lbl) ->
                                     FilterChip(
                                         selected = selectedTarget == v,
                                         onClick = { selectedTarget = v },
@@ -933,13 +933,13 @@ private fun FileSelectOverlay(
                                 FilterChip(
                                     selected = mediaType == FolderType.IMAGE,
                                     onClick = { mediaType = FolderType.IMAGE },
-                                    label = { Text("Images") },
+                                    label = { Text("图片") },
                                     leadingIcon = { Icon(Icons.Default.Image, null, Modifier.size(16.dp)) }
                                 )
                                 FilterChip(
                                     selected = mediaType == FolderType.VIDEO,
                                     onClick = { mediaType = FolderType.VIDEO },
-                                    label = { Text("Videos") },
+                                    label = { Text("视频") },
                                     leadingIcon = { Icon(Icons.Default.VideoLibrary, null, Modifier.size(16.dp)) }
                                 )
                             }
@@ -957,7 +957,7 @@ private fun FileSelectOverlay(
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        selectedFolder?.displayName ?: "No folders",
+                                        selectedFolder?.displayName ?: "无文件夹",
                                         style = MaterialTheme.typography.labelMedium
                                     )
                                     Spacer(Modifier.width(4.dp))
@@ -991,14 +991,14 @@ private fun FileSelectOverlay(
                 ) {
                     when {
                         folders.isEmpty() -> Text(
-                            "No ${if (mediaType == FolderType.VIDEO) "video" else "image"} folders saved.\nAdd folders in the app first.",
+                            "还没有保存${if (mediaType == FolderType.VIDEO) "视频" else "图片"}文件夹。\n请先在应用中添加。",
                             style = MaterialTheme.typography.bodySmall,
                             color = secondaryTextColor,
                             modifier = Modifier.padding(24.dp)
                         )
                         loading -> CircularProgressIndicator()
                         mediaItems.isEmpty() -> Text(
-                            "No files found in this folder.",
+                            "此文件夹中没有文件。",
                             style = MaterialTheme.typography.bodySmall,
                             color = secondaryTextColor,
                             modifier = Modifier.padding(24.dp)
@@ -1195,10 +1195,10 @@ private fun DisplayControlOverlay(
     onDismiss: () -> Unit
 ) {
     val rows = listOf(
-        Triple("home_image", "Home Image", homeImageEnabled),
-        Triple("home_video", "Home Video", homeVideoEnabled),
-        Triple("lock_image", "Lock Image", lockImageEnabled),
-        Triple("lock_video", "Lock Video", lockVideoEnabled)
+        Triple("home_image", "桌面图片", homeImageEnabled),
+        Triple("home_video", "桌面视频", homeVideoEnabled),
+        Triple("lock_image", "锁屏图片", lockImageEnabled),
+        Triple("lock_video", "锁屏视频", lockVideoEnabled)
     )
     val anyHomeEnabled = homeImageEnabled || homeVideoEnabled
     val anyLockEnabled = lockImageEnabled || lockVideoEnabled
@@ -1225,17 +1225,17 @@ private fun DisplayControlOverlay(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Display Control",
+                        "显示控制",
                         style = MaterialTheme.typography.titleMedium,
                         color = primaryTextColor,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = primaryTextColor)
+                        Icon(Icons.Default.Close, contentDescription = "关闭", tint = primaryTextColor)
                     }
                 }
                 Text(
-                    "Cycle wallpaper on each unlock",
+                    "每次解锁时轮换壁纸",
                     style = MaterialTheme.typography.bodySmall,
                     color = secondaryTextColor
                 )
@@ -1261,7 +1261,7 @@ private fun DisplayControlOverlay(
                 if (anyHomeEnabled || anyLockEnabled) {
                     HorizontalDivider()
                     Text(
-                        "Reset timer on unlock",
+                        "解锁时重置定时",
                         style = MaterialTheme.typography.labelMedium,
                         color = secondaryTextColor
                     )
@@ -1275,7 +1275,7 @@ private fun DisplayControlOverlay(
                                 onCheckedChange = onResetHomeTimer
                             )
                             Text(
-                                "Reset home timer on unlock",
+                                "解锁时重置桌面定时",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = primaryTextColor
                             )
@@ -1291,7 +1291,7 @@ private fun DisplayControlOverlay(
                                 onCheckedChange = onResetLockTimer
                             )
                             Text(
-                                "Reset lock timer on unlock",
+                                "解锁时重置锁屏定时",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = primaryTextColor
                             )
@@ -1301,7 +1301,7 @@ private fun DisplayControlOverlay(
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
-                ) { Text("Close", color = secondaryTextColor) }
+                ) { Text("关闭", color = secondaryTextColor) }
             }
         }
     }
@@ -1329,11 +1329,11 @@ private fun PujieWatchFacePickerOverlay(
                 .clickable(enabled = false, onClick = {})
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Pujie Watch Face", style = MaterialTheme.typography.titleMedium, color = primaryTextColor)
+                Text("Pujie 表盘", style = MaterialTheme.typography.titleMedium, color = primaryTextColor)
                 Spacer(Modifier.height(4.dp))
                 if (presets.isEmpty()) {
                     Text(
-                        "No watch faces configured.\nAdd them in Settings → Pujie Watch Faces.",
+                        "尚未配置表盘。\n请到设置 → Pujie 表盘 中添加。",
                         style = MaterialTheme.typography.bodySmall,
                         color = secondaryTextColor
                     )
@@ -1355,7 +1355,7 @@ private fun PujieWatchFacePickerOverlay(
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
-                ) { Text("Close", color = secondaryTextColor) }
+                ) { Text("关闭", color = secondaryTextColor) }
             }
         }
     }
@@ -1387,10 +1387,10 @@ private fun PopupItem.subtitle(): String {
         POPUP_ACTION_ICON_COLOR    -> "Icon Color · ${iconColor.replaceFirstChar { it.uppercase() }}"
         POPUP_ACTION_FOLDER_SELECT -> "$targetLabel · Set ${mediaType.replaceFirstChar { it.uppercase() }} Folder"
         POPUP_ACTION_SELECT_FILE   -> "Browse & select file"
-        POPUP_ACTION_TIMER             -> "Wallpaper Timers"
+        POPUP_ACTION_TIMER             -> "壁纸定时器"
         POPUP_ACTION_FOLDER_SELECT_ALL -> "All Default Folders"
-        POPUP_ACTION_DISPLAY_CONTROL   -> "Display Control"
-        POPUP_ACTION_PUJIE_WATCH_FACE  -> "Pujie Watch Faces"
+        POPUP_ACTION_DISPLAY_CONTROL   -> "显示控制"
+        POPUP_ACTION_PUJIE_WATCH_FACE  -> "Pujie 表盘"
         POPUP_ACTION_AER_MOUNT         -> "Mount Aer Storage"
         else                           -> ""
     }

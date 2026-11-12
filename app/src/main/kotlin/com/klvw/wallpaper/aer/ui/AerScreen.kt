@@ -116,7 +116,7 @@ fun AerScreen(
                 },
                 title = {
                     if (isSelectionMode) {
-                        Text("${uiState.selectedIds.size} selected",
+                        Text("已选 ${uiState.selectedIds.size} 项",
                             style = MaterialTheme.typography.titleMedium)
                     } else {
                         Row(
@@ -143,27 +143,27 @@ fun AerScreen(
                         // Mount toggle
                         if (uiState.isMounted) {
                             IconButton(onClick = { vm.unmount() }) {
-                                Icon(Icons.Default.LockOpen, contentDescription = "Unmount",
+                                Icon(Icons.Default.LockOpen, contentDescription = "卸载",
                                     tint = MaterialTheme.colorScheme.primary)
                             }
                         } else {
                             IconButton(onClick = { vm.mount(context) }) {
-                                Icon(Icons.Default.Lock, contentDescription = "Mount")
+                                Icon(Icons.Default.Lock, contentDescription = "挂载")
                             }
                         }
                         IconButton(onClick = { vm.showCreateFolderDialog(true); newFolderName = "" }) {
-                            Icon(Icons.Default.CreateNewFolder, contentDescription = "New folder")
+                            Icon(Icons.Default.CreateNewFolder, contentDescription = "新建文件夹")
                         }
                         Box {
                             IconButton(onClick = { showImportMenu = true }) {
-                                Icon(Icons.Default.Add, contentDescription = "Import")
+                                Icon(Icons.Default.Add, contentDescription = "导入")
                             }
                             DropdownMenu(
                                 expanded = showImportMenu,
                                 onDismissRequest = { showImportMenu = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Import Files") },
+                                    text = { Text("导入文件") },
                                     leadingIcon = { Icon(Icons.Default.Image, null) },
                                     onClick = {
                                         showImportMenu = false
@@ -171,7 +171,7 @@ fun AerScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Import Folder") },
+                                    text = { Text("导入文件夹") },
                                     leadingIcon = { Icon(Icons.Default.Folder, null) },
                                     onClick = {
                                         showImportMenu = false
@@ -198,12 +198,12 @@ fun AerScreen(
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        "Unmounted — external apps cannot see files",
+                        "已卸载 — 外部应用看不到这些文件",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { vm.mount(context) }) { Text("Mount") }
+                    TextButton(onClick = { vm.mount(context) }) { Text("挂载") }
                 }
             }
 
@@ -220,7 +220,7 @@ fun AerScreen(
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                         Text(
-                            "Empty — tap + to import media",
+                            "空空如也 — 点 + 导入媒体",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodyMedium
@@ -277,7 +277,7 @@ fun AerScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "${uiState.selectedIds.size} selected",
+                    "已选 ${uiState.selectedIds.size} 项",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -290,7 +290,7 @@ fun AerScreen(
                         }) {
                             Icon(Icons.Default.DriveFileRenameOutline, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Rename")
+                            Text("重命名")
                         }
                     }
                 }
@@ -298,7 +298,7 @@ fun AerScreen(
                     OutlinedButton(onClick = { vm.addSelectedAsStaticWallpapers() }) {
                         Icon(Icons.Default.Wallpaper, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Static")
+                        Text("静态")
                     }
                 }
                 Button(
@@ -307,7 +307,7 @@ fun AerScreen(
                 ) {
                     Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Delete")
+                    Text("删除")
                 }
             }
         }
@@ -325,7 +325,7 @@ fun AerScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CircularProgressIndicator()
-                    Text("Importing...", style = MaterialTheme.typography.bodyMedium)
+                    Text("正在导入…", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -335,12 +335,12 @@ fun AerScreen(
     if (uiState.showCreateFolder) {
         AlertDialog(
             onDismissRequest = { vm.showCreateFolderDialog(false) },
-            title = { Text("New Folder") },
+            title = { Text("新建文件夹") },
             text = {
                 OutlinedTextField(
                     value = newFolderName,
                     onValueChange = { newFolderName = it },
-                    label = { Text("Folder name") },
+                    label = { Text("文件夹名称") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -351,10 +351,10 @@ fun AerScreen(
                         vm.createFolder(newFolderName.trim())
                         vm.showCreateFolderDialog(false)
                     }
-                }) { Text("Create") }
+                }) { Text("创建") }
             },
             dismissButton = {
-                TextButton(onClick = { vm.showCreateFolderDialog(false) }) { Text("Cancel") }
+                TextButton(onClick = { vm.showCreateFolderDialog(false) }) { Text("取消") }
             }
         )
     }
@@ -364,15 +364,15 @@ fun AerScreen(
         val count = uiState.selectedIds.size
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Items") },
-            text = { Text("Permanently delete $count item${if (count != 1) "s" else ""}?") },
+            title = { Text("删除项目") },
+            text = { Text("确定永久删除 $count 项吗？") },
             confirmButton = {
                 TextButton(onClick = { vm.deleteSelected(); showDeleteConfirm = false }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text("删除", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
             }
         )
     }
@@ -382,12 +382,12 @@ fun AerScreen(
     if (renameTarget != null) {
         AlertDialog(
             onDismissRequest = { vm.dismissRenameDialog() },
-            title = { Text("Rename") },
+            title = { Text("重命名") },
             text = {
                 OutlinedTextField(
                     value = renameText,
                     onValueChange = { renameText = it },
-                    label = { Text("New name") },
+                    label = { Text("新名称") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -395,10 +395,10 @@ fun AerScreen(
             confirmButton = {
                 TextButton(onClick = {
                     if (renameText.isNotBlank()) vm.renameItem(renameTarget, renameText)
-                }) { Text("Rename") }
+                }) { Text("重命名") }
             },
             dismissButton = {
-                TextButton(onClick = { vm.dismissRenameDialog() }) { Text("Cancel") }
+                TextButton(onClick = { vm.dismissRenameDialog() }) { Text("取消") }
             }
         )
     }

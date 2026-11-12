@@ -59,11 +59,11 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
     ) {
         Spacer(Modifier.height(8.dp))
 
-        SettingsSection(title = "Performance") {
+        SettingsSection(title = "性能") {
             SettingToggle(
                 icon = Icons.Default.Bolt,
-                title = "Vulkan GPU Rendering",
-                subtitle = "Use Vulkan for hardware-accelerated image rendering",
+                title = "Vulkan GPU 渲染",
+                subtitle = "使用 Vulkan 进行硬件加速图片渲染",
                 checked = state.useVulkan,
                 onCheckedChange = { viewModel.setUseVulkan(it) }
             )
@@ -72,8 +72,8 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             var cacheCleared by remember { mutableStateOf(false) }
             SettingAction(
                 icon = Icons.Default.DeleteSweep,
-                title = "Clear Thumbnail Cache",
-                subtitle = if (cacheCleared) "Cache cleared" else "Remove cached thumbnails so replaced files show fresh",
+                title = "清除缩略图缓存",
+                subtitle = if (cacheCleared) "缓存已清除" else "清除缩略图缓存，使替换后的文件显示最新内容",
                 onClick = {
                     imageLoader.memoryCache?.clear()
                     imageLoader.diskCache?.clear()
@@ -82,7 +82,7 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             )
         }
 
-        SettingsSection(title = "Status Bar Icons") {
+        SettingsSection(title = "状态栏图标") {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -95,12 +95,12 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
                     tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Icon Color", style = MaterialTheme.typography.bodyMedium)
-                    Text("Override status bar icon brightness", style = MaterialTheme.typography.bodySmall,
+                    Text("图标颜色", style = MaterialTheme.typography.bodyMedium)
+                    Text("强制覆盖状态栏图标明暗", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("auto" to "Auto", "dark" to "Dark", "light" to "Light").forEach { (value, label) ->
+                        listOf("auto" to "自动", "dark" to "深色", "light" to "浅色").forEach { (value, label) ->
                             FilterChip(
                                 selected = state.forceIconColor == value,
                                 onClick = { viewModel.setForceIconColor(value) },
@@ -112,11 +112,11 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             }
         }
 
-        SettingsSection(title = "Live Wallpaper") {
+        SettingsSection(title = "动态壁纸") {
             SettingAction(
                 icon = Icons.Default.Tune,
-                title = "Activate Live Wallpaper",
-                subtitle = "Set KLVW as the live wallpaper service",
+                title = "启用动态壁纸",
+                subtitle = "将 KLVW 设为动态壁纸服务",
                 onClick = {
                     try {
                         val intent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
@@ -126,41 +126,41 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             )
         }
 
-        SettingsSection(title = "KLVW Popup Menu") {
+        SettingsSection(title = "KLVW 弹层菜单") {
             KLVWPopupSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "KLVW Quick Set Tile") {
+        SettingsSection(title = "KLVW 快捷设置磁贴") {
             QuickSetTileSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "Pujie Watch Faces") {
+        SettingsSection(title = "Pujie 表盘") {
             PujieWatchFaceSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "KLVW Display Control") {
+        SettingsSection(title = "KLVW 显示控制") {
             DisplayControlSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "Wallpaper Timers") {
+        SettingsSection(title = "壁纸定时器") {
             TimerNotificationSection(popupViewModel = popupViewModel)
             TimerGlobalOffSection(popupViewModel = popupViewModel)
             TimerPauseOnLockSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "KLVW Watch") {
+        SettingsSection(title = "KLVW 手表") {
             KLVWWatchSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "Aer Private Storage") {
+        SettingsSection(title = "Aer 私密存储") {
             AerStorageSection(popupViewModel)
         }
 
-        SettingsSection(title = "Popup Appearance") {
+        SettingsSection(title = "弹层外观") {
             PopupAppearanceSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "About") {
+        SettingsSection(title = "关于") {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -172,15 +172,15 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Info, contentDescription = null,
                             modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text("KLVW Wallpaper", style = MaterialTheme.typography.titleMedium)
+                        Text("KLVW 壁纸", style = MaterialTheme.typography.titleMedium)
                     }
-                    Text("Version 1.0.0", style = MaterialTheme.typography.bodySmall,
+                    Text("版本 7.0.0", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Samsung UI 8 · Android 16 · Vulkan GPU",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Text("Tasker Plugin: Add the KLVW action in Tasker → New Task → + → Plugin → KLVW Wallpaper",
+                    Text("Tasker 插件：在 Tasker → 新建任务 → + → 插件 → KLVW Wallpaper 中添加动作",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = MaterialTheme.typography.bodySmall.lineHeight)
@@ -224,7 +224,7 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
         HorizontalDivider(thickness = 0.5.dp)
 
         // ── Layout & auto-scale (inline) ─────────────────────────────────────
-        Text("Item Layout", style = MaterialTheme.typography.labelMedium,
+        Text("项目布局", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -237,13 +237,13 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
                 FilterChip(
                     selected = popupLayout == "list",
                     onClick = { popupViewModel.setPopupLayout("list") },
-                    label = { Text("List") },
+                    label = { Text("列表") },
                     leadingIcon = { Icon(Icons.Default.ViewList, null, Modifier.size(16.dp)) }
                 )
                 FilterChip(
                     selected = popupLayout == "grid",
                     onClick = { popupViewModel.setPopupLayout("grid") },
-                    label = { Text("Grid") },
+                    label = { Text("网格") },
                     leadingIcon = { Icon(Icons.Default.GridView, null, Modifier.size(16.dp)) }
                 )
             }
@@ -255,11 +255,11 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
                     checked = popupAutoScale,
                     onCheckedChange = { popupViewModel.setPopupAutoScale(it) }
                 )
-                Text("Auto-scale", style = MaterialTheme.typography.bodySmall)
+                Text("自动缩放", style = MaterialTheme.typography.bodySmall)
             }
         }
         if (popupLayout == "grid") {
-            Text("Columns", style = MaterialTheme.typography.labelMedium,
+            Text("列数", style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (2..5).forEach { n ->
@@ -275,10 +275,10 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
         HorizontalDivider(thickness = 0.5.dp)
 
         // ── Size & Scaling ────────────────────────────────────────────────────
-        Text("Popup Width", style = MaterialTheme.typography.labelMedium,
+        Text("弹层宽度", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(0.60f to "Narrow", 0.78f to "Medium", 0.92f to "Wide").forEach { (frac, lbl) ->
+            listOf(0.60f to "窄", 0.78f to "中", 0.92f to "宽").forEach { (frac, lbl) ->
                 FilterChip(
                     selected = kotlin.math.abs(popupWidthFraction - frac) < 0.02f,
                     onClick = { popupViewModel.setPopupWidthFraction(frac) },
@@ -287,7 +287,7 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
             }
         }
         if (!popupAutoScale) {
-            Text("Manual Item Size", style = MaterialTheme.typography.labelMedium,
+            Text("手动项目尺寸", style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(40 to "XS", 56 to "S", 72 to "M", 88 to "L", 104 to "XL").forEach { (sz, lbl) ->
@@ -300,34 +300,34 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
             }
         }
 
-        Text("Apply width to overlays", style = MaterialTheme.typography.labelMedium,
+        Text("将宽度应用到子弹层", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Checkbox(checked = popupScaleIconColor, onCheckedChange = { popupViewModel.setPopupScaleIconColor(it) })
-            Text("Icon Color Picker", style = MaterialTheme.typography.bodySmall)
+            Text("图标颜色选择器", style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Checkbox(checked = popupScaleFolderSelect, onCheckedChange = { popupViewModel.setPopupScaleFolderSelect(it) })
-            Text("Folder Selector", style = MaterialTheme.typography.bodySmall)
+            Text("文件夹选择器", style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Checkbox(checked = popupScaleTimer, onCheckedChange = { popupViewModel.setPopupScaleTimer(it) })
-            Text("Timer Popup", style = MaterialTheme.typography.bodySmall)
+            Text("定时弹层", style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Checkbox(checked = popupScaleFolderSelectAll, onCheckedChange = { popupViewModel.setPopupScaleFolderSelectAll(it) })
-            Text("All Folders Popup", style = MaterialTheme.typography.bodySmall)
+            Text("全部文件夹弹层", style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Checkbox(checked = popupScaleDisplayControl, onCheckedChange = { popupViewModel.setPopupScaleDisplayControl(it) })
-            Text("Display Control Popup", style = MaterialTheme.typography.bodySmall)
+            Text("显示控制弹层", style = MaterialTheme.typography.bodySmall)
         }
 
         HorizontalDivider(thickness = 0.5.dp)
 
         if (items.isEmpty()) {
             Text(
-                "No popup items configured yet. Tap Add Item to build your popup menu.",
+                "还没有弹层项目。点「添加项目」开始配置弹层菜单。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -348,7 +348,7 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
                             val mutable = items.toMutableList()
                             mutable.add(index - 1, mutable.removeAt(index))
                             popupViewModel.saveItems(mutable)
-                        }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up",
+                        }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移",
                             modifier = Modifier.size(20.dp)) }
                     } else {
                         Spacer(Modifier.size(48.dp))
@@ -359,18 +359,18 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
                             val mutable = items.toMutableList()
                             mutable.add(index + 1, mutable.removeAt(index))
                             popupViewModel.saveItems(mutable)
-                        }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down",
+                        }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移",
                             modifier = Modifier.size(20.dp)) }
                     } else {
                         Spacer(Modifier.size(48.dp))
                     }
                     // Edit
                     IconButton(onClick = { editorItem = item; showEditor = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Edit, contentDescription = "编辑", modifier = Modifier.size(20.dp))
                     }
                     // Delete
                     IconButton(onClick = { popupViewModel.saveItems(items.filter { it.id != item.id }) }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(20.dp),
+                        Icon(Icons.Default.Delete, contentDescription = "删除", modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.error)
                     }
                 }
@@ -384,7 +384,7 @@ private fun KLVWPopupSection(popupViewModel: KLVWPopupViewModel) {
         ) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Add Item")
+            Text("添加项目")
         }
     }
 
@@ -417,9 +417,9 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
     val pujiePresets by popupViewModel.pujieWatchFaces.collectAsStateWithLifecycle()
 
     val actions = listOf(
-        "random_image" to "Random Image",
-        "random_video" to "Random Video",
-        "static_image" to "Static Image"
+        "random_image" to "随机图片",
+        "random_video" to "随机视频",
+        "static_image" to "静态图"
     )
     val isKillSwitch = homeAction == "static_image" && lockAction == "static_image"
 
@@ -432,13 +432,13 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            "Configure what the KLVW Quick Set tile does when tapped.",
+            "配置点按「KLVW 快捷设置」磁贴时的行为。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         // Home action
-        Text("Home Screen", style = MaterialTheme.typography.labelMedium)
+        Text("桌面", style = MaterialTheme.typography.labelMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             actions.forEach { (value, label) ->
                 FilterChip(
@@ -451,7 +451,7 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
         if (homeAction == "static_image") {
             if (staticImages.isEmpty()) {
                 Text(
-                    "No static images saved. Add a Static Image action in KLVW Popup Menu first.",
+                    "还没有保存静态图。请先在「KLVW 弹层菜单」中添加「静态图」动作。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -472,7 +472,7 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
         HorizontalDivider(thickness = 0.5.dp)
 
         // Lock action
-        Text("Lock Screen", style = MaterialTheme.typography.labelMedium)
+        Text("锁屏", style = MaterialTheme.typography.labelMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             actions.forEach { (value, label) ->
                 FilterChip(
@@ -485,7 +485,7 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
         if (lockAction == "static_image") {
             if (staticImages.isEmpty()) {
                 Text(
-                    "No static images saved. Add a Static Image action in KLVW Popup Menu first.",
+                    "还没有保存静态图。请先在「KLVW 弹层菜单」中添加「静态图」动作。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -506,10 +506,10 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
         HorizontalDivider(thickness = 0.5.dp)
 
         // Watch action
-        Text("Watch Face", style = MaterialTheme.typography.labelMedium)
+        Text("表盘", style = MaterialTheme.typography.labelMedium)
         if (pujiePresets.isEmpty()) {
             Text(
-                "No Pujie watch faces saved. Add them in the Pujie Watch Faces section below.",
+                "还没有保存 Pujie 表盘。请在下方「Pujie 表盘」区域添加。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -520,7 +520,7 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
                     onClick = { popupViewModel.setQuickSetWatchPresetId(null) }
                 )
                 Spacer(Modifier.width(4.dp))
-                Text("None (skip watch face)", style = MaterialTheme.typography.bodySmall)
+                Text("无（跳过表盘）", style = MaterialTheme.typography.bodySmall)
             }
             pujiePresets.forEach { preset ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -547,7 +547,7 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    "Both screens set to Static Image — this tile acts as a global kill switch. Tapping it will apply static wallpapers and disable all KLVW wallpaper functions until re-enabled via long press.",
+                    "桌面与锁屏都设为静态图时，此磁贴会变成总开关：点一下应用静态壁纸并停用全部 KLVW 壁纸功能；长按可重新启用。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -555,7 +555,7 @@ private fun QuickSetTileSection(popupViewModel: KLVWPopupViewModel) {
         }
 
         Text(
-            "For Random Image/Video, the tile uses the default folders set in the Folder Selector popup items.",
+            "随机图片/视频时，磁贴会使用弹层「文件夹选择」里设置的默认文件夹。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -605,7 +605,7 @@ private fun OverlayPermissionRow() {
             tint = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text("Appear on top", style = MaterialTheme.typography.bodyMedium)
+            Text("显示在最上层", style = MaterialTheme.typography.bodyMedium)
             Text(
                 if (granted) "Granted — popup can overlay other apps"
                 else "Not granted — popup may not show over other apps",
@@ -621,7 +621,7 @@ private fun OverlayPermissionRow() {
                         Uri.parse("package:${context.packageName}")
                     )
                 )
-            }) { Text("Grant") }
+            }) { Text("授权") }
         }
     }
 }
@@ -673,7 +673,7 @@ private fun PujieWatchFaceSection(popupViewModel: KLVWPopupViewModel) {
                 Icon(Icons.Default.Warning, contentDescription = null,
                     modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
                 Text(
-                    "Pujie Watch Faces app not found",
+                    "未找到 Pujie 表盘应用",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -681,7 +681,7 @@ private fun PujieWatchFaceSection(popupViewModel: KLVWPopupViewModel) {
         } else {
             if (presets.isEmpty()) {
                 Text(
-                    "No watch faces added yet. Tap Add Watch Face to configure one.",
+                    "还没有添加表盘。点「添加表盘」进行配置。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -704,7 +704,7 @@ private fun PujieWatchFaceSection(popupViewModel: KLVWPopupViewModel) {
                             onClick = { popupViewModel.savePujieWatchFaces(presets.toMutableList().also { it.removeAt(index) }) },
                             modifier = Modifier.size(36.dp)
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove",
+                            Icon(Icons.Default.Delete, contentDescription = "移除",
                                 tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -727,10 +727,10 @@ private fun PujieWatchFaceSection(popupViewModel: KLVWPopupViewModel) {
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Add Watch Face", style = MaterialTheme.typography.labelMedium)
+                Text("添加表盘", style = MaterialTheme.typography.labelMedium)
             }
             Text(
-                "Add a 'Pujie Watch Face' item to the popup menu to access these faces from the popup.",
+                "在弹层菜单中添加「Pujie 表盘」项目后，可从弹层访问这些表盘。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -790,7 +790,7 @@ private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Permissions", style = MaterialTheme.typography.labelMedium,
+        Text("权限", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         listOf(
@@ -824,20 +824,20 @@ private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 if (!granted) {
-                    TextButton(onClick = grant) { Text("Grant") }
+                    TextButton(onClick = grant) { Text("授权") }
                 }
             }
         }
 
         HorizontalDivider()
-        Text("On Unlock — Cycle Wallpaper", style = MaterialTheme.typography.labelMedium,
+        Text("解锁时 — 轮换壁纸", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         listOf(
-            Triple("home_image", "Home Image", homeImage),
-            Triple("home_video", "Home Video", homeVideo),
-            Triple("lock_image", "Lock Image", lockImage),
-            Triple("lock_video", "Lock Video", lockVideo)
+            Triple("home_image", "桌面图片", homeImage),
+            Triple("home_video", "桌面视频", homeVideo),
+            Triple("lock_image", "锁屏图片", lockImage),
+            Triple("lock_video", "锁屏视频", lockVideo)
         ).forEach { (key, label, enabled) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -854,18 +854,18 @@ private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
 
         if (anyHomeEnabled || anyLockEnabled) {
             HorizontalDivider()
-            Text("Reset timer on unlock", style = MaterialTheme.typography.labelMedium,
+            Text("解锁时重置定时", style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (anyHomeEnabled) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Checkbox(checked = resetHomeTimer, onCheckedChange = { popupViewModel.setDisplayControlResetHomeTimer(it) })
-                    Text("Reset home timer on unlock", style = MaterialTheme.typography.bodySmall)
+                    Text("解锁时重置桌面定时", style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (anyLockEnabled) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Checkbox(checked = resetLockTimer, onCheckedChange = { popupViewModel.setDisplayControlResetLockTimer(it) })
-                    Text("Reset lock timer on unlock", style = MaterialTheme.typography.bodySmall)
+                    Text("解锁时重置锁屏定时", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -894,41 +894,41 @@ private fun PopupAppearanceSection(popupViewModel: KLVWPopupViewModel) {
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
-            "Customize the popup menu colors. Leave as Default to follow the system theme.",
+            "自定义弹层颜色。保持「默认」则跟随系统主题。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(4.dp))
         ColorPickerRow(
-            label = "Background",
+            label = "背景色",
             storedHex = bgHex,
             defaultColor = themeSurface.copy(alpha = 0.95f),
             onColorChange = { popupViewModel.setPopupBgColor(it) }
         )
         HorizontalDivider(thickness = 0.5.dp)
         ColorPickerRow(
-            label = "Primary Text",
+            label = "主文字颜色",
             storedHex = primaryHex,
             defaultColor = themeOnSurface,
             onColorChange = { popupViewModel.setPopupPrimaryTextColor(it) }
         )
         HorizontalDivider(thickness = 0.5.dp)
         ColorPickerRow(
-            label = "Secondary Text",
+            label = "次文字颜色",
             storedHex = secondaryHex,
             defaultColor = themeOnSurfaceVariant,
             onColorChange = { popupViewModel.setPopupSecondaryTextColor(it) }
         )
         HorizontalDivider(thickness = 0.5.dp)
         ColorPickerRow(
-            label = "Timer Interval Highlight",
+            label = "定时间隔高亮色",
             storedHex = timerHighlightHex,
             defaultColor = themePrimary.copy(alpha = 0.35f),
             onColorChange = { popupViewModel.setPopupTimerHighlightColor(it) }
         )
         HorizontalDivider(thickness = 0.5.dp)
         ColorPickerRow(
-            label = "Timer Section Border",
+            label = "定时分区边框色",
             storedHex = timerBorderHex,
             defaultColor = Color.White.copy(alpha = 0.15f),
             onColorChange = { popupViewModel.setPopupTimerBorderColor(it) }
@@ -985,7 +985,7 @@ private fun ColorPickerRow(
                 TextButton(
                     onClick = { onColorChange(null) },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                ) { Text("Default", style = MaterialTheme.typography.labelSmall) }
+                ) { Text("默认", style = MaterialTheme.typography.labelSmall) }
             }
             IconButton(
                 onClick = { expanded = !expanded },
@@ -1053,9 +1053,9 @@ private fun TimerNotificationSection(popupViewModel: KLVWPopupViewModel) {
                 tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text("Timer status on unlock", style = MaterialTheme.typography.bodyMedium)
+                Text("解锁时显示定时状态", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Show a notification with remaining time when you unlock your screen. " +
+                    "解锁时显示通知，提示各定时器剩余时间。" +
                     "Expand it to pause or reset individual timers.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1076,9 +1076,9 @@ private fun TimerNotificationSection(popupViewModel: KLVWPopupViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Only show when running", style = MaterialTheme.typography.bodyMedium)
+                    Text("仅在运行时显示", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "Hide notification while all timers are paused.",
+                        "全部定时器暂停时隐藏通知。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1113,9 +1113,9 @@ private fun TimerGlobalOffSection(popupViewModel: KLVWPopupViewModel) {
                 tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text("Pause timers on Global Off", style = MaterialTheme.typography.bodyMedium)
+                Text("全局关闭时暂停定时", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "When you press the Global Off QS button, all running timers are paused " +
+                    "按下「全局关闭」快捷设置按钮时，所有运行中的定时器会暂停。" +
                     "automatically. Resume them from the timer notification.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1150,9 +1150,9 @@ private fun TimerPauseOnLockSection(popupViewModel: KLVWPopupViewModel) {
                 tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("Pause on Lock (P.o.L)", style = MaterialTheme.typography.bodyMedium)
+                Text("锁屏暂停 (P.o.L)", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Each enabled timer can pause automatically when you lock the device " +
+                    "锁屏时，已开启的定时器可自动暂停（倒计时冻结，解锁后继续）。" +
                     "and resume when you unlock.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1160,10 +1160,10 @@ private fun TimerPauseOnLockSection(popupViewModel: KLVWPopupViewModel) {
             }
         }
         listOf(
-            "home_image" to "Home Image",
-            "home_video" to "Home Video",
-            "lock_image" to "Lock Image",
-            "lock_video" to "Lock Video"
+            "home_image" to "桌面图片",
+            "home_video" to "桌面视频",
+            "lock_image" to "锁屏图片",
+            "lock_video" to "锁屏视频"
         ).forEach { (key, label) ->
             val checked = when (key) {
                 "home_image" -> homeImage
@@ -1252,7 +1252,7 @@ private fun SettingAction(
             Text(subtitle, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        TextButton(onClick = onClick) { Text("Open") }
+        TextButton(onClick = onClick) { Text("打开") }
     }
 }
 
@@ -1278,7 +1278,7 @@ private fun KLVWWatchSection(popupViewModel: KLVWPopupViewModel) {
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Configure actions for your Galaxy Watch. The watch app fetches this list when opened.",
+            "为 Galaxy Watch 配置动作。手表应用打开时会拉取此列表。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -1294,7 +1294,7 @@ private fun KLVWWatchSection(popupViewModel: KLVWPopupViewModel) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "No watch items yet. Tap \"Add Watch Item\" to get started.",
+                    "还没有手表项目。点「添加手表项目」开始。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1369,9 +1369,9 @@ private fun KLVWWatchSection(popupViewModel: KLVWPopupViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Vibrate on Global Off", style = MaterialTheme.typography.bodyMedium)
+                Text("全局关闭时震动", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Vibrate the phone when Global Off is triggered from the watch",
+                    "从手表触发「全局关闭」时震动手机",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1388,7 +1388,7 @@ private fun KLVWWatchSection(popupViewModel: KLVWPopupViewModel) {
         ) {
             Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Add Watch Item")
+            Text("添加手表项目")
         }
 
         WatchSideloadCard(expanded = showSideload, onToggle = { showSideload = !showSideload })
@@ -1429,8 +1429,8 @@ private fun WatchItemEditorDialog(
 
     val watchActions = listOf("random_image", "random_video", "restore", "global_off", "timers")
     val actionLabels = mapOf(
-        "random_image" to "Random Image",
-        "random_video" to "Random Video",
+        "random_image" to "随机图片",
+        "random_video" to "随机视频",
         "restore"      to "Restore",
         "global_off"   to "Global Off",
         "timers"       to "Timers"
@@ -1438,19 +1438,19 @@ private fun WatchItemEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial != null) "Edit Watch Item" else "Add Watch Item") },
+        title = { Text(if (initial != null) "Edit Watch Item" else "添加手表项目") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it; labelError = false },
-                    label = { Text("Label") },
+                    label = { Text("标签") },
                     isError = labelError,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Action Type", style = MaterialTheme.typography.labelMedium)
+                Text("动作类型", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     watchActions.forEach { type ->
                         FilterChip(
@@ -1468,7 +1468,7 @@ private fun WatchItemEditorDialog(
                 }
 
                 if (actionType == "random_image" || actionType == "random_video") {
-                    Text("Apply To", style = MaterialTheme.typography.labelMedium)
+                    Text("应用到", style = MaterialTheme.typography.labelMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("home", "lock", "both").forEach { t ->
                             FilterChip(
@@ -1481,12 +1481,12 @@ private fun WatchItemEditorDialog(
 
                     val folders = if (actionType == "random_image") imageFolders else videoFolders
                     if (folders.isNotEmpty()) {
-                        Text("Source Folder (optional)", style = MaterialTheme.typography.labelMedium)
+                        Text("来源文件夹（可选）", style = MaterialTheme.typography.labelMedium)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             FilterChip(
                                 selected = folderUri.isBlank(),
                                 onClick  = { folderUri = "" },
-                                label    = { Text("Default folder") }
+                                label    = { Text("默认文件夹") }
                             )
                             folders.forEach { uri ->
                                 val name = Uri.parse(uri).lastPathSegment?.substringAfterLast(':') ?: uri
@@ -1513,10 +1513,10 @@ private fun WatchItemEditorDialog(
                         folderUri  = folderUri
                     )
                 )
-            }) { Text("Save") }
+            }) { Text("保存") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
 }
@@ -1539,7 +1539,7 @@ private fun WatchSideloadCard(expanded: Boolean, onToggle: () -> Unit) {
             Icon(Icons.Default.Watch, null, modifier = Modifier.size(22.dp),
                 tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
-            Text("Install Watch App", modifier = Modifier.weight(1f),
+            Text("安装手表应用", modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium)
             Icon(
                 if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -1554,11 +1554,11 @@ private fun WatchSideloadCard(expanded: Boolean, onToggle: () -> Unit) {
             ) {
                 HorizontalDivider()
                 Spacer(Modifier.height(4.dp))
-                Text("To sideload KLVW Watch onto your Galaxy Watch:",
+                Text("将 KLVW Watch 侧载到 Galaxy Watch：",
                     style = MaterialTheme.typography.bodySmall)
-                Text("1. On the watch: Settings → Developer options → Wireless debugging → Enable",
+                Text("1. 手表：设置 → 开发者选项 → 无线调试 → 开启",
                     style = MaterialTheme.typography.bodySmall)
-                Text("2. On your PC: pair and connect via ADB",
+                Text("2. 电脑：用 ADB 配对并连接",
                     style = MaterialTheme.typography.bodySmall)
                 androidx.compose.foundation.text.selection.SelectionContainer {
                     Text(
@@ -1567,7 +1567,7 @@ private fun WatchSideloadCard(expanded: Boolean, onToggle: () -> Unit) {
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
                 }
-                Text("3. Install the watch APK:",
+                Text("3. 安装手表 APK：",
                     style = MaterialTheme.typography.bodySmall)
                 androidx.compose.foundation.text.selection.SelectionContainer {
                     Text(
@@ -1576,7 +1576,7 @@ private fun WatchSideloadCard(expanded: Boolean, onToggle: () -> Unit) {
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
                 }
-                Text("4. Open \"KLVW Watch\" from the watch app drawer.",
+                Text("4. 在手表应用列表中打开「KLVW Watch」。",
                     style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -1617,7 +1617,7 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
                 tint = if (isMounted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Column(modifier = Modifier.weight(1f)) {
-                Text("Status", style = MaterialTheme.typography.bodyMedium)
+                Text("状态", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     if (isMounted) "Mounted — external apps can see files" else "Unmounted — private from external apps",
                     style = MaterialTheme.typography.bodySmall,
@@ -1628,25 +1628,25 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
                 OutlinedButton(onClick = {
                     AerLockStore.unmount(context)
                     isMounted = false
-                }) { Text("Unmount") }
+                }) { Text("卸载") }
             } else {
                 Button(onClick = {
                     context.startActivity(Intent(context, AerMountActivity::class.java))
-                }) { Text("Mount") }
+                }) { Text("挂载") }
             }
         }
         HorizontalDivider(thickness = 0.5.dp)
         SettingToggle(
             icon = Icons.Default.ScreenLockPortrait,
-            title = "Unmount on device lock",
-            subtitle = "Lock Aer automatically when the screen turns off",
+            title = "设备锁屏时卸载",
+            subtitle = "熄屏时自动卸载 Aer（外部应用不可见）",
             checked = aerUnmountOnLock,
             onCheckedChange = { popupViewModel.setAerUnmountOnLock(it) }
         )
         HorizontalDivider(thickness = 0.5.dp)
         SettingAction(
             icon = Icons.Default.Timer,
-            title = "Unmount after",
+            title = "超时后卸载",
             subtitle = if (aerAutoUnmountMinutes > 0)
                 "Automatically locks after $aerAutoUnmountMinutes minute${if (aerAutoUnmountMinutes != 1) "s" else ""}"
             else
@@ -1659,20 +1659,20 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
         HorizontalDivider(thickness = 0.5.dp)
         SettingAction(
             icon = Icons.Default.FolderOpen,
-            title = "Open in Files App",
-            subtitle = "Browse and play media in the system file manager",
+            title = "在文件应用中打开",
+            subtitle = "在系统文件管理器中浏览与播放",
             onClick = { AerShell.open(context) }
         )
         HorizontalDivider(thickness = 0.5.dp)
         SettingAction(
             icon = Icons.Default.FolderSpecial,
-            title = "Manage Aer Storage",
-            subtitle = "Import files and assign images as wallpapers",
+            title = "管理 Aer 存储",
+            subtitle = "导入文件，并可把图片设为壁纸",
             onClick = { context.startActivity(Intent(context, AerActivity::class.java)) }
         )
         HorizontalDivider(thickness = 0.5.dp)
         Text(
-            "Files in Aer are stored in app-private storage. Open in Files App to browse with the system file manager and play videos with the default player. Use Manage to import media.",
+            "Aer 文件保存在应用私有存储。可在「文件应用」中用系统文件管理器浏览，并用默认播放器播放视频。用「管理」导入媒体。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = MaterialTheme.typography.bodySmall.lineHeight
@@ -1682,18 +1682,18 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
     if (showAutoUnmountDialog) {
         AlertDialog(
             onDismissRequest = { showAutoUnmountDialog = false },
-            title = { Text("Unmount after") },
+            title = { Text("超时后卸载") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Enter timeout in minutes (0 or blank to disable).",
+                        "输入超时分钟数（0 或留空表示关闭）。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = autoUnmountInput,
                         onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 4) autoUnmountInput = it },
-                        label = { Text("Minutes") },
+                        label = { Text("分钟") },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
@@ -1707,10 +1707,10 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
                     val minutes = autoUnmountInput.toIntOrNull() ?: 0
                     popupViewModel.setAerAutoUnmountMinutes(minutes)
                     showAutoUnmountDialog = false
-                }) { Text("Save") }
+                }) { Text("保存") }
             },
             dismissButton = {
-                TextButton(onClick = { showAutoUnmountDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showAutoUnmountDialog = false }) { Text("取消") }
             }
         )
     }

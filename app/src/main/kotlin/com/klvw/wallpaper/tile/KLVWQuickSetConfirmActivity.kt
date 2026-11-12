@@ -91,13 +91,13 @@ class KLVWQuickSetConfirmActivity : ComponentActivity() {
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                "Re-enable KLVW?",
+                                "重新启用 KLVW？",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = primaryColor
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "This will unlock all wallpaper functions and restore the previous home and lock screen wallpapers.",
+                                "这将重新启用全部壁纸功能，并恢复之前的桌面与锁屏壁纸。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = secondaryColor
                             )
@@ -110,13 +110,13 @@ class KLVWQuickSetConfirmActivity : ComponentActivity() {
                                     onClick = { finish() },
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("No", color = secondaryColor)
+                                    Text("否", color = secondaryColor)
                                 }
                                 Button(
                                     onClick = { launchAuth() },
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Yes")
+                                    Text("是")
                                 }
                             }
                         }

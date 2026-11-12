@@ -36,10 +36,10 @@ class TimerActionPickerActivity : ComponentActivity() {
             ?: run { finish(); return }
 
         val title = when (action) {
-            TimerStatusNotificationHelper.VALUE_PAUSE      -> "Pause Timer"
-            TimerStatusNotificationHelper.VALUE_RESUME     -> "Resume Timer"
-            TimerStatusNotificationHelper.VALUE_CHANGE_NOW -> "Change Wallpaper Now"
-            else -> "Reset Timer"
+            TimerStatusNotificationHelper.VALUE_PAUSE      -> "暂停定时"
+            TimerStatusNotificationHelper.VALUE_RESUME     -> "继续定时"
+            TimerStatusNotificationHelper.VALUE_CHANGE_NOW -> "立即更换壁纸"
+            else -> "重置定时"
         }
 
         setContent {
@@ -96,7 +96,7 @@ private fun TimerPickerDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
 }

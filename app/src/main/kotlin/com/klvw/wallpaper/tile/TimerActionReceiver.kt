@@ -113,7 +113,7 @@ class TimerActionReceiver : BroadcastReceiver() {
         }
 
         /**
-         * "Change Now" button: immediately pick the next shuffle-bag wallpaper for this
+         * "立即更换" button: immediately pick the next shuffle-bag wallpaper for this
          * timer's linked folder and apply it, without touching the timer schedule.
          * Also called from TimerActionPickerActivity for the multi-timer picker path.
          */

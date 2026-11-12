@@ -30,13 +30,13 @@ class IconColorTileConfig : ComponentActivity() {
                 val color by prefs.forceIconColor.collectAsStateWithLifecycle("auto")
                 AlertDialog(
                     onDismissRequest = ::finish,
-                    title = { Text("Icon Color") },
+                    title = { Text("图标颜色") },
                     text = {
                         Column {
                             listOf(
-                                "auto" to "Auto",
-                                "dark" to "Dark Icons",
-                                "light" to "Light Icons"
+                                "auto" to "自动",
+                                "dark" to "深色图标",
+                                "light" to "浅色图标"
                             ).forEach { (v, l) ->
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -55,7 +55,7 @@ class IconColorTileConfig : ComponentActivity() {
                             }
                         }
                     },
-                    confirmButton = { TextButton(onClick = ::finish) { Text("Done") } }
+                    confirmButton = { TextButton(onClick = ::finish) { Text("完成") } }
                 )
             }
         }

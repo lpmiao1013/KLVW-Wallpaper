@@ -114,44 +114,44 @@ private fun TaskerEditScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("KLVW Tasker Action", style = MaterialTheme.typography.headlineSmall)
+        Text("KLVW Tasker 动作", style = MaterialTheme.typography.headlineSmall)
 
         // ── action chips ──────────────────────────────────────────────────────
-        Text("Action Type", style = MaterialTheme.typography.labelLarge)
+        Text("动作类型", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             FilterChip(
                 selected = selectedAction == TaskerBundle.ACTION_RANDOM_IMAGE,
                 onClick = { selectedAction = TaskerBundle.ACTION_RANDOM_IMAGE; selectedFolderUri = "" },
-                label = { Text("Random Image") }
+                label = { Text("随机图片") }
             )
             FilterChip(
                 selected = selectedAction == TaskerBundle.ACTION_STATIC_IMAGE,
                 onClick = { selectedAction = TaskerBundle.ACTION_STATIC_IMAGE; selectedImageUri = "" },
-                label = { Text("Static Image") }
+                label = { Text("静态图") }
             )
             FilterChip(
                 selected = selectedAction == TaskerBundle.ACTION_RANDOM_VIDEO,
                 onClick = { selectedAction = TaskerBundle.ACTION_RANDOM_VIDEO; selectedFolderUri = "" },
-                label = { Text("Random Video") }
+                label = { Text("随机视频") }
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = selectedAction == TaskerBundle.ACTION_RESTORE_PREVIOUS,
                 onClick = { selectedAction = TaskerBundle.ACTION_RESTORE_PREVIOUS },
-                label = { Text("Restore Previous") }
+                label = { Text("恢复上一张") }
             )
             FilterChip(
                 selected = selectedAction == TaskerBundle.ACTION_SET_ICON_COLOR,
                 onClick = { selectedAction = TaskerBundle.ACTION_SET_ICON_COLOR },
-                label = { Text("Set Icon Color") }
+                label = { Text("设置图标颜色") }
             )
         }
 
         // ── action-specific options ───────────────────────────────────────────
         when {
             isSetIconColor -> {
-                Text("Icon Color", style = MaterialTheme.typography.labelLarge)
+                Text("图标颜色", style = MaterialTheme.typography.labelLarge)
                 listOf(
                     TaskerBundle.ICON_COLOR_AUTO        to "Auto (Android decides)",
                     TaskerBundle.ICON_COLOR_DARK        to "Dark Icons (black, for light wallpapers)",
@@ -167,15 +167,15 @@ private fun TaskerEditScreen(
             }
 
             isRestorePrevious -> Text(
-                "Restores the last wallpaper that was active before the most recent change.",
+                "恢复最近一次更换之前的壁纸。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             isStatic -> {
-                Text("Image", style = MaterialTheme.typography.labelLarge)
+                Text("图片", style = MaterialTheme.typography.labelLarge)
                 if (staticImages.isEmpty()) {
-                    Text("No static images saved. Add images in the Static tab first.",
+                    Text("还没有保存静态图。请先在「静态」页添加图片。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
@@ -194,7 +194,7 @@ private fun TaskerEditScreen(
 
             else -> {
                 // Random Image or Random Video
-                Text("Source Folder", style = MaterialTheme.typography.labelLarge)
+                Text("来源文件夹", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     RadioButton(
                         selected = selectedFolderUri == TaskerBundle.FOLDER_URI_DEFAULT,
@@ -202,8 +202,8 @@ private fun TaskerEditScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Column {
-                        Text("Global Default Folder", style = MaterialTheme.typography.bodyMedium)
-                        Text("Uses the default folder set in KLVW → Folder Selector",
+                        Text("全局默认文件夹", style = MaterialTheme.typography.bodyMedium)
+                        Text("使用 KLVW → 文件夹选择器 中设置的默认文件夹",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -211,10 +211,10 @@ private fun TaskerEditScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     RadioButton(selected = selectedFolderUri.isEmpty(), onClick = { selectedFolderUri = "" })
                     Spacer(Modifier.width(8.dp))
-                    Text("All Folders", style = MaterialTheme.typography.bodyMedium)
+                    Text("全部文件夹", style = MaterialTheme.typography.bodyMedium)
                 }
                 if (folders.isEmpty()) {
-                    Text("No ${if (isVideo) "video" else "image"} folders saved. Add folders in the app first.",
+                    Text("还没有保存${if (isVideo) "视频" else "图片"}文件夹。请先在应用中添加。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
@@ -234,9 +234,9 @@ private fun TaskerEditScreen(
 
         // ── target ────────────────────────────────────────────────────────────
         if (!isSetIconColor) {
-            Text("Apply To", style = MaterialTheme.typography.labelLarge)
+            Text("应用到", style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(TaskerBundle.TARGET_HOME to "Home", TaskerBundle.TARGET_LOCK to "Lock", TaskerBundle.TARGET_BOTH to "Both")
+                listOf(TaskerBundle.TARGET_HOME to "桌面", TaskerBundle.TARGET_LOCK to "锁屏", TaskerBundle.TARGET_BOTH to "两者")
                     .forEach { (key, label) ->
                         FilterChip(
                             selected = selectedTarget == key,
@@ -251,7 +251,7 @@ private fun TaskerEditScreen(
 
         // ── save / cancel ─────────────────────────────────────────────────────
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
-            OutlinedButton(onClick = onCancel) { Text("Cancel") }
+            OutlinedButton(onClick = onCancel) { Text("取消") }
             Button(
                 onClick = {
                     if (!canSave) return@Button
@@ -264,10 +264,10 @@ private fun TaskerEditScreen(
                         isSetIconColor -> {
                             resultBundle.putString(TaskerBundle.BUNDLE_KEY_ICON_COLOR, selectedIconColor)
                             val colorLabel = when (selectedIconColor) {
-                                TaskerBundle.ICON_COLOR_DARK        -> "Dark"
-                                TaskerBundle.ICON_COLOR_LIGHT       -> "Light"
+                                TaskerBundle.ICON_COLOR_DARK        -> "深色"
+                                TaskerBundle.ICON_COLOR_LIGHT       -> "浅色"
                                 TaskerBundle.ICON_COLOR_INTERACTIVE -> "Ask at runtime"
-                                else                                -> "Auto"
+                                else                                -> "自动"
                             }
                             blurb = "Icon Color - $colorLabel"
                         }
@@ -281,20 +281,20 @@ private fun TaskerEditScreen(
                         else -> {
                             val folderName = when {
                                 selectedFolderUri == TaskerBundle.FOLDER_URI_DEFAULT -> "Global Default"
-                                selectedFolderUri.isEmpty() -> "All Folders"
+                                selectedFolderUri.isEmpty() -> "全部文件夹"
                                 else -> folders.find { it.uri == selectedFolderUri }?.displayName
                                     ?: savedFolderName.ifBlank { Uri.decode(selectedFolderUri.substringAfterLast('/')) }
                             }
                             resultBundle.putString(TaskerBundle.BUNDLE_KEY_FOLDER_URI, selectedFolderUri)
                             resultBundle.putString(TaskerBundle.BUNDLE_KEY_FOLDER_NAME, folderName)
-                            val typeLabel = if (isVideo) "Video" else "Image"
+                            val typeLabel = if (isVideo) "视频" else "图片"
                             blurb = "${selectedTarget.replaceFirstChar { it.uppercase() }} - $typeLabel - $folderName"
                         }
                     }
                     onSave(resultBundle, blurb)
                 },
                 enabled = canSave
-            ) { Text("Save") }
+            ) { Text("保存") }
         }
     }
 }

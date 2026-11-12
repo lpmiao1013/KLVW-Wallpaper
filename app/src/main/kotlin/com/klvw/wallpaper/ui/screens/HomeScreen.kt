@@ -16,9 +16,9 @@ import com.klvw.wallpaper.tile.KLVWPopupViewModel
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 
 private enum class NavTab(val label: String, val icon: ImageVector) {
-    WALLPAPER("Wallpaper", Icons.Default.Wallpaper),
-    FOLDERS("Folders", Icons.Default.Folder),
-    SETTINGS("Settings", Icons.Default.Settings)
+    WALLPAPER("壁纸", Icons.Default.Wallpaper),
+    FOLDERS("文件夹", Icons.Default.Folder),
+    SETTINGS("设置", Icons.Default.Settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,9 +35,9 @@ fun HomeScreen(
                 title = {
                     Text(
                         when (currentTab) {
-                            NavTab.WALLPAPER -> "KLVW Wallpaper"
-                            NavTab.FOLDERS -> "Folder Manager"
-                            NavTab.SETTINGS -> "Settings"
+                            NavTab.WALLPAPER -> "KLVW 壁纸"
+                            NavTab.FOLDERS -> "文件夹管理"
+                            NavTab.SETTINGS -> "设置"
                         },
                         style = MaterialTheme.typography.headlineSmall
                     )

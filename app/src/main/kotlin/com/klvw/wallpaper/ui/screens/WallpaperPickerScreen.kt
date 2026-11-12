@@ -72,7 +72,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                     picked, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: SecurityException) {}
-            val displayName = picked.lastPathSegment?.substringAfterLast('/') ?: "Image"
+            val displayName = picked.lastPathSegment?.substringAfterLast('/') ?: "图片"
             when (state.mediaTab) {
                 MediaTab.STATIC -> viewModel.addStaticImage(picked, displayName)
                 else -> {
@@ -135,7 +135,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            listOf(MediaTab.IMAGE to "Image", MediaTab.STATIC to "Static", MediaTab.VIDEO to "Video").forEach { (tab, label) ->
+            listOf(MediaTab.IMAGE to "图片", MediaTab.STATIC to "静态", MediaTab.VIDEO to "视频").forEach { (tab, label) ->
                 val selected = state.mediaTab == tab
                 Box(
                     modifier = Modifier
@@ -156,9 +156,9 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
         }
 
         // Target selector
-        Text("Apply to", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("应用到", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(WallpaperTarget.HOME to "Home", WallpaperTarget.LOCK to "Lock").forEach { (t, label) ->
+            listOf(WallpaperTarget.HOME to "桌面", WallpaperTarget.LOCK to "锁屏").forEach { (t, label) ->
                 FilterChip(
                     selected = state.target == t,
                     onClick = { viewModel.setTarget(t) },
@@ -172,8 +172,8 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
             val selUri = state.selectedFolderUri
             val buttonLabel = when {
                 folders.size == 1 -> folders.first().displayName
-                selUri == null -> "All Folders"
-                else -> folders.find { it.uri == selUri }?.displayName ?: "Select Folder"
+                selUri == null -> "全部文件夹"
+                else -> folders.find { it.uri == selUri }?.displayName ?: "选择文件夹"
             }
             val hasMultiple = folders.size > 1
             Box(modifier = Modifier.fillMaxWidth()) {
@@ -200,7 +200,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                     onDismissRequest = { folderMenuExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All Folders") },
+                        text = { Text("全部文件夹") },
                         onClick = { viewModel.selectFolder(null); folderMenuExpanded = false },
                         leadingIcon = if (selUri == null) {
                             { Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) }
@@ -241,9 +241,9 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                 ) {
                     Text(
                         when (state.mediaTab) {
-                            MediaTab.STATIC -> "Add images using the button below"
-                            MediaTab.IMAGE -> if (folders.isEmpty()) "Add a folder to see images" else "No images found"
-                            MediaTab.VIDEO -> if (folders.isEmpty()) "Add a folder to see videos" else "No videos found"
+                            MediaTab.STATIC -> "用下方按钮添加图片"
+                            MediaTab.IMAGE -> if (folders.isEmpty()) "添加文件夹以查看图片" else "未找到图片"
+                            MediaTab.VIDEO -> if (folders.isEmpty()) "添加文件夹以查看视频" else "未找到视频"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
@@ -291,7 +291,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (state.mediaTab == MediaTab.STATIC) "Add Image" else "From Gallery")
+                Text(if (state.mediaTab == MediaTab.STATIC) "添加图片" else "从相册选择")
             }
             Button(
                 onClick = { viewModel.setWallpaper() },
@@ -302,7 +302,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                 if (state.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
-                    Text("Set Wallpaper")
+                    Text("设为壁纸")
                 }
             }
         }
@@ -373,7 +373,7 @@ private fun MediaThumbnail(
         if (isSelected) {
             Icon(
                 Icons.Default.CheckCircle,
-                contentDescription = "Selected",
+                contentDescription = "已选中",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(20.dp)
             )
@@ -392,7 +392,7 @@ private fun MediaThumbnail(
             ) {
                 Icon(
                     Icons.Default.Close,
-                    contentDescription = "Remove",
+                    contentDescription = "移除",
                     tint = Color.White,
                     modifier = Modifier.size(12.dp)
                 )
@@ -470,7 +470,7 @@ private fun MediaPreviewDialog(
                     ) {
                         Icon(
                             Icons.Default.PlayArrow,
-                            contentDescription = "Play",
+                            contentDescription = "播放",
                             tint = Color.White,
                             modifier = Modifier.size(40.dp)
                         )
@@ -502,7 +502,7 @@ private fun MediaPreviewDialog(
             ) {
                 Icon(
                     Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = "关闭",
                     tint = Color.White,
                     modifier = Modifier.size(16.dp)
                 )

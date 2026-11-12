@@ -82,13 +82,13 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             AddFolderButton(
-                label = "Add Image Folder",
+                label = "添加图片文件夹",
                 icon = Icons.Default.Image,
                 modifier = Modifier.weight(1f),
                 onClick = { addingType = FolderType.IMAGE; folderPicker.launch(null) }
             )
             AddFolderButton(
-                label = "Add Video Folder",
+                label = "添加视频文件夹",
                 icon = Icons.Default.VideoFile,
                 modifier = Modifier.weight(1f),
                 onClick = { addingType = FolderType.VIDEO; folderPicker.launch(null) }
@@ -97,13 +97,13 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             AddFolderButton(
-                label = "Add Aer Image",
+                label = "添加 Aer 图片",
                 icon = Icons.Default.Lock,
                 modifier = Modifier.weight(1f),
                 onClick = { addingAerType = FolderType.IMAGE }
             )
             AddFolderButton(
-                label = "Add Aer Video",
+                label = "添加 Aer 视频",
                 icon = Icons.Default.Lock,
                 modifier = Modifier.weight(1f),
                 onClick = { addingAerType = FolderType.VIDEO }
@@ -112,7 +112,7 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
 
         if (state.imageFolders.isNotEmpty()) {
             FolderSection(
-                title = "Image Folders",
+                title = "图片文件夹",
                 folders = state.imageFolders,
                 onRemove = { viewModel.removeFolder(it) }
             )
@@ -120,7 +120,7 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
 
         if (state.videoFolders.isNotEmpty()) {
             FolderSection(
-                title = "Video Folders",
+                title = "视频文件夹",
                 folders = state.videoFolders,
                 onRemove = { viewModel.removeFolder(it) }
             )
@@ -139,7 +139,7 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
                     Icon(Icons.Default.Folder, contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("No folders added yet", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Text("还没有添加文件夹", color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -173,13 +173,13 @@ private fun DefaultFoldersSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Default Folders",
+            "默认文件夹",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
         Text(
-            "Used by popup items and Tasker actions when no folder is specified",
+            "弹层项目或 Tasker 动作未指定文件夹时使用",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -243,7 +243,7 @@ private fun DefaultFolderRow(
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 if (currentFolder != null) {
                     DropdownMenuItem(
-                        text = { Text("Clear", color = MaterialTheme.colorScheme.error) },
+                        text = { Text("清除", color = MaterialTheme.colorScheme.error) },
                         onClick = { onSelect(null); expanded = false }
                     )
                     HorizontalDivider()
@@ -331,7 +331,7 @@ private fun FolderItem(folder: FolderEntity, onRemove: () -> Unit) {
             )
         }
         IconButton(onClick = onRemove, modifier = Modifier.size(40.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = "Remove",
+            Icon(Icons.Default.Delete, contentDescription = "移除",
                 tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
         }
     }
@@ -356,7 +356,7 @@ private fun AerFolderPickerDialog(
     }
 
     val currentFolder = AerFolder(
-        name = pathComponents.lastOrNull() ?: "Aer Root",
+        name = pathComponents.lastOrNull() ?: "Aer 根目录",
         relPath = currentRelPath ?: ""
     )
 
@@ -364,13 +364,13 @@ private fun AerFolderPickerDialog(
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Add Aer ${if (type == FolderType.IMAGE) "Image" else "Video"} Folder")
+                Text("添加 Aer ${if (type == FolderType.IMAGE) "图片" else "视频"}")
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Aer Root",
+                        "Aer 根目录",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (pathComponents.isEmpty()) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.tertiary,
@@ -411,7 +411,7 @@ private fun AerFolderPickerDialog(
                     Icon(Icons.Default.Lock, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Select \"${currentFolder.name}\"",
+                        "选择「${currentFolder.name}」",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -423,7 +423,7 @@ private fun AerFolderPickerDialog(
                     }
                 } else if (subfolders.isEmpty()) {
                     Text(
-                        "No subfolders here",
+                        "这里没有子文件夹",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -479,9 +479,9 @@ private fun AerFolderPickerDialog(
                         val newComponents = pathComponents.dropLast(1)
                         pathComponents = newComponents
                         currentRelPath = newComponents.joinToString("/").ifEmpty { null }
-                    }) { Text("Back") }
+                    }) { Text("返回") }
                 }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { Text("取消") }
             }
         }
     )

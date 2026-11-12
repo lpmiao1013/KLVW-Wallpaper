@@ -41,7 +41,7 @@ fun PopupItemEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existingItem == null) "Add Item" else "Edit Item") },
+        title = { Text(if (existingItem == null) "添加项目" else "Edit Item") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -51,24 +51,24 @@ fun PopupItemEditorDialog(
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("Label") },
+                    label = { Text("标签") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 // Action type
-                Text("Action Type", style = MaterialTheme.typography.labelLarge)
+                Text("动作类型", style = MaterialTheme.typography.labelLarge)
                 val actionTypes = listOf(
-                    POPUP_ACTION_RANDOM_IMAGE      to "Random Image",
-                    POPUP_ACTION_RANDOM_VIDEO      to "Random Video",
-                    POPUP_ACTION_STATIC_IMAGE      to "Static Image",
-                    POPUP_ACTION_RESTORE           to "Restore Previous",
-                    POPUP_ACTION_ICON_COLOR        to "Icon Color",
+                    POPUP_ACTION_RANDOM_IMAGE      to "随机图片",
+                    POPUP_ACTION_RANDOM_VIDEO      to "随机视频",
+                    POPUP_ACTION_STATIC_IMAGE      to "静态图",
+                    POPUP_ACTION_RESTORE           to "恢复上一张",
+                    POPUP_ACTION_ICON_COLOR        to "图标颜色",
                     POPUP_ACTION_SELECT_FILE       to "Select File",
                     POPUP_ACTION_TIMER             to "Timer Control",
-                    POPUP_ACTION_FOLDER_SELECT_ALL to "All Folders",
-                    POPUP_ACTION_DISPLAY_CONTROL   to "Display Control",
-                    POPUP_ACTION_PUJIE_WATCH_FACE  to "Pujie Watch Face",
+                    POPUP_ACTION_FOLDER_SELECT_ALL to "全部文件夹",
+                    POPUP_ACTION_DISPLAY_CONTROL   to "显示控制",
+                    POPUP_ACTION_PUJIE_WATCH_FACE  to "Pujie 表盘",
                     POPUP_ACTION_AER_MOUNT         to "Aer Mount"
                 )
                 FlowRow(
@@ -87,11 +87,11 @@ fun PopupItemEditorDialog(
                 // Action-specific options
                 when (actionType) {
                     POPUP_ACTION_RANDOM_IMAGE, POPUP_ACTION_RANDOM_VIDEO -> {
-                        Text("Source Folder", style = MaterialTheme.typography.labelLarge)
+                        Text("来源文件夹", style = MaterialTheme.typography.labelLarge)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = folderUri.isEmpty(), onClick = { folderUri = "" })
                             Spacer(Modifier.width(4.dp))
-                            Text("Use default folder", style = MaterialTheme.typography.bodySmall)
+                            Text("使用默认文件夹", style = MaterialTheme.typography.bodySmall)
                         }
                         folders.forEach { folder ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -105,10 +105,10 @@ fun PopupItemEditorDialog(
                         }
                     }
                     POPUP_ACTION_STATIC_IMAGE -> {
-                        Text("Image", style = MaterialTheme.typography.labelLarge)
+                        Text("图片", style = MaterialTheme.typography.labelLarge)
                         if (staticImages.isEmpty()) {
                             Text(
-                                "No static images saved.",
+                                "还没有保存静态图。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -126,8 +126,8 @@ fun PopupItemEditorDialog(
                         }
                     }
                     POPUP_ACTION_ICON_COLOR -> {
-                        Text("Color", style = MaterialTheme.typography.labelLarge)
-                        listOf("auto" to "Auto", "dark" to "Dark", "light" to "Light").forEach { (v, lbl) ->
+                        Text("颜色", style = MaterialTheme.typography.labelLarge)
+                        listOf("auto" to "自动", "dark" to "深色", "light" to "浅色").forEach { (v, lbl) ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(selected = iconColor == v, onClick = { iconColor = v })
                                 Spacer(Modifier.width(4.dp))
@@ -147,9 +147,9 @@ fun PopupItemEditorDialog(
                     POPUP_ACTION_AER_MOUNT
                 )
                 if (actionType !in noTargetActions) {
-                    Text("Apply To", style = MaterialTheme.typography.labelLarge)
+                    Text("应用到", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("home" to "Home", "lock" to "Lock", "both" to "Both").forEach { (v, lbl) ->
+                        listOf("home" to "桌面", "lock" to "锁屏", "both" to "两者").forEach { (v, lbl) ->
                             FilterChip(
                                 selected = target == v,
                                 onClick = { target = v },
@@ -178,8 +178,8 @@ fun PopupItemEditorDialog(
                     )
                 },
                 enabled = canSave
-            ) { Text("Save") }
+            ) { Text("保存") }
         },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } }
     )
 }

@@ -1,0 +1,191 @@
+Aer
+ / $part
+Import Files
+Import Folder
+Unmounted — external apps cannot see files
+Mount
+Empty — tap + to import media
+Rename
+Static
+Delete
+Importing...
+New Folder
+Folder name
+Create
+Cancel
+Delete Items
+Permanently delete $count item${if (count != 1) 
+New name
+Unmount
+New folder
+Import
+KLVW Tasker Action
+Action Type
+Random Image
+Static Image
+Random Video
+Restore Previous
+Set Icon Color
+Icon Color
+Restores the last wallpaper that was active before the most recent change.
+Image
+No static images saved. Add images in the Static tab first.
+Source Folder
+Global Default Folder
+Uses the default folder set in KLVW → Folder Selector
+All Folders
+No ${if (isVideo) 
+Apply To
+Save
+KLVW
+No actions configured — open Settings to add items
+Select ${item.mediaType.replaceFirstChar { it.uppercase() }} Folder (${item.target.replaceFirstChar { it.uppercase() }})
+No folders saved. Add folders in the app first.
+Default Folders
+No ${selectedMediaType} folders saved. Add folders in the app first.
+Wallpaper Timers
+No timers running
+Paused
+in ${formatCountdown(fireAt - now)}
+Pause on lock
+Close
+Select Wallpaper
+Images
+Videos
+No ${if (mediaType == FolderType.VIDEO) 
+No files found in this folder.
+Display Control
+Cycle wallpaper on each unlock
+Reset timer on unlock
+Reset home timer on unlock
+Reset lock timer on unlock
+Pujie Watch Face
+No watch faces configured.\nAdd them in Settings → Pujie Watch Faces.
+Re-enable KLVW?
+This will unlock all wallpaper functions and restore the previous home and lock screen wallpapers.
+No
+Yes
+Done
+No folders added yet
+Used by popup items and Tasker actions when no folder is specified
+Clear
+Add Aer ${if (type == FolderType.IMAGE) 
+Aer Root
+ / 
+Select \"${currentFolder.name}\"
+No subfolders here
+Back
+Image Folders
+Video Folders
+Add Image Folder
+Add Video Folder
+Add Aer Image
+Add Aer Video
+Remove
+tab_anim
+Label
+Use default folder
+No static images saved.
+Color
+Override status bar icon brightness
+KLVW Wallpaper
+Version 1.0.0
+Samsung UI 8 · Android 16 · Vulkan GPU
+Tasker Plugin: Add the KLVW action in Tasker → New Task → + → Plugin → KLVW Wallpaper
+Item Layout
+List
+Grid
+Auto-scale
+Columns
+Popup Width
+Manual Item Size
+Apply width to overlays
+Icon Color Picker
+Folder Selector
+Timer Popup
+All Folders Popup
+Display Control Popup
+No popup items configured yet. Tap Add Item to build your popup menu.
+Add Item
+Configure what the KLVW Quick Set tile does when tapped.
+Home Screen
+No static images saved. Add a Static Image action in KLVW Popup Menu first.
+Lock Screen
+Watch Face
+No Pujie watch faces saved. Add them in the Pujie Watch Faces section below.
+None (skip watch face)
+Both screens set to Static Image — this tile acts as a global kill switch. Tapping it will apply static wallpapers and disable all KLVW wallpaper functions until re-enabled via long press.
+For Random Image/Video, the tile uses the default folders set in the Folder Selector popup items.
+Appear on top
+Grant
+Pujie Watch Faces app not found
+No watch faces added yet. Tap Add Watch Face to configure one.
+Add Watch Face
+Add a 'Pujie Watch Face' item to the popup menu to access these faces from the popup.
+Permissions
+On Unlock — Cycle Wallpaper
+Customize the popup menu colors. Leave as Default to follow the system theme.
+Default
+Timer status on unlock
+Show a notification with remaining time when you unlock your screen. 
+Only show when running
+Hide notification while all timers are paused.
+Pause timers on Global Off
+When you press the Global Off QS button, all running timers are paused 
+Pause on Lock (P.o.L)
+Each enabled timer can pause automatically when you lock the device 
+Open
+Configure actions for your Galaxy Watch. The watch app fetches this list when opened.
+No watch items yet. Tap \"Add Watch Item\" to get started.
+Vibrate on Global Off
+Vibrate the phone when Global Off is triggered from the watch
+Add Watch Item
+Source Folder (optional)
+Default folder
+Install Watch App
+To sideload KLVW Watch onto your Galaxy Watch:
+1. On the watch: Settings → Developer options → Wireless debugging → Enable
+2. On your PC: pair and connect via ADB
+   adb pair <ip>:<pairing-port>\n   adb connect <ip>:<port>
+3. Install the watch APK:
+   adb install -r wear/build/outputs/apk/debug/wear-debug.apk
+4. Open \"KLVW Watch\" from the watch app drawer.
+Status
+Files in Aer are stored in app-private storage. Open in Files App to browse with the system file manager and play videos with the default player. Use Manage to import media.
+Unmount after
+Enter timeout in minutes (0 or blank to disable).
+Minutes
+Performance
+Vulkan GPU Rendering
+Use Vulkan for hardware-accelerated image rendering
+Clear Thumbnail Cache
+Status Bar Icons
+Live Wallpaper
+Activate Live Wallpaper
+Set KLVW as the live wallpaper service
+KLVW Popup Menu
+KLVW Quick Set Tile
+Pujie Watch Faces
+KLVW Display Control
+KLVW Watch
+Aer Private Storage
+Popup Appearance
+About
+Unmount on device lock
+Lock Aer automatically when the screen turns off
+Open in Files App
+Browse and play media in the system file manager
+Manage Aer Storage
+Import files and assign images as wallpapers
+Background
+Primary Text
+Secondary Text
+Timer Interval Highlight
+Timer Section Border
+Move up
+Move down
+Edit
+Apply to
+Set Wallpaper
+Selected
+Play

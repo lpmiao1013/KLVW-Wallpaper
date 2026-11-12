@@ -42,10 +42,10 @@ object TimerStatusNotificationHelper {
             val paused = pausedMap[key] == true
             val fireAt = nextFireTimes[key]
             val status = when {
-                paused -> "Paused"
+                paused -> "已暂停"
                 fireAt != null -> {
                     val remaining = fireAt - now
-                    if (remaining > 0) formatRemaining(remaining) else "firing…"
+                    if (remaining > 0) formatRemaining(remaining) else "即将触发…"
                 }
                 else -> "—"
             }
@@ -73,7 +73,7 @@ object TimerStatusNotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_timer_notification)
-            .setContentTitle("KLVW Timers")
+            .setContentTitle("KLVW 定时器")
             .setContentText(contentText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
             .setAutoCancel(false)
@@ -85,7 +85,7 @@ object TimerStatusNotificationHelper {
                 if (activeKeys.isNotEmpty()) {
                     builder.addAction(
                         android.R.drawable.ic_media_next,
-                        "Change Now",
+                        "立即更换",
                         buildActionIntent(context, VALUE_CHANGE_NOW, activeKeys, reqCode = 8005)
                     )
                 }
@@ -93,14 +93,14 @@ object TimerStatusNotificationHelper {
                 if (pausedKeys.isNotEmpty()) {
                     builder.addAction(
                         android.R.drawable.ic_media_play,
-                        "Resume",
+                        "继续",
                         buildActionIntent(context, VALUE_RESUME, pausedKeys, reqCode = 8003)
                     )
                 }
                 // Reset — always present
                 builder.addAction(
                     android.R.drawable.ic_menu_rotate,
-                    "Reset",
+                    "重置",
                     buildActionIntent(context, VALUE_RESET, enabledKeys, reqCode = 8002)
                 )
             }
@@ -184,15 +184,15 @@ object TimerStatusNotificationHelper {
     }
 
     fun timerLabel(key: String) = when (key) {
-        "home_image" -> "Home Image"
-        "home_video" -> "Home Video"
-        "lock_image" -> "Lock Image"
-        "lock_video" -> "Lock Video"
+        "home_image" -> "桌面图片"
+        "home_video" -> "桌面视频"
+        "lock_image" -> "锁屏图片"
+        "lock_video" -> "锁屏视频"
         else -> key
     }
 
     fun formatRemaining(ms: Long): String {
-        if (ms <= 0) return "now"
+        if (ms <= 0) return "现在"
         val totalSec = ms / 1000
         val h = totalSec / 3600
         val m = (totalSec % 3600) / 60
