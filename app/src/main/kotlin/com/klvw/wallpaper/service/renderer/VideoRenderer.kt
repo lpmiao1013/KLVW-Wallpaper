@@ -415,23 +415,22 @@ class VideoRenderer(
     private fun drawFrame() {
         val sw = screenW.coerceAtLeast(1)
         val sh = screenH.coerceAtLeast(1)
-        val vw = videoW.coerceAtLeast(1)
-        val vh = videoH.coerceAtLeast(1)
+        val vw = videoW.coerceAtLeast(1).toFloat()
+        val vh = videoH.coerceAtLeast(1).toFloat()
 
-        val rotate = WallpaperLayout.shouldAutoRotate(vw, vh, sw, sh, rotateMismatchEnabled)
-        val (cw, ch) = WallpaperLayout.effectiveSize(vw, vh, rotate)
-        val dest = WallpaperLayout.destinationRect(cw, ch, sw, sh, scaleMode)
+        // Same pipeline as WallpaperSwitcher: NDC video quad (UV origin bottom-left)
+        // + optional R * SurfaceTextureMatrix. Our old top-left dest-rect UVs made
+        // those R matrices mirror the whole frame.
+        val rotate = WallpaperLayout.shouldAutoRotate(
+            videoW, videoH, screenW, screenH, rotateMismatchEnabled
+        )
+        val effW = if (rotate) vh else vw
+        val effH = if (rotate) vw else vh
+        val verts = WallpaperLayout.computeVideoQuad(
+            effW, effH, sw.toFloat(), sh.toFloat(), scaleMode
+        )
 
         Matrix.setIdentityM(mvpMatrix, 0)
-        val sx = 2f / sw
-        val sy = -2f / sh
-        Matrix.translateM(mvpMatrix, 0, -1f, 1f, 0f)
-        Matrix.scaleM(mvpMatrix, 0, sx, sy, 1f)
-        Matrix.translateM(mvpMatrix, 0, dest.left, dest.top, 0f)
-        Matrix.scaleM(mvpMatrix, 0, dest.width(), dest.height(), 1f)
-
-        // Match WallpaperSwitcher: R * SurfaceTextureMatrix with fixed UV 90° matrices.
-        // Center rotateM / corner UV remaps both produced mirrored text here.
         if (rotate) {
             val r = if (rotateMismatchCw) EXTRA_ROTATE_90_CW else EXTRA_ROTATE_90_CCW
             Matrix.multiplyMM(texMatrix, 0, r, 0, stMatrix, 0)
@@ -449,13 +448,6 @@ class VideoRenderer(
         GLES20.glUniformMatrix4fv(mvpUniform, 1, false, mvpMatrix, 0)
         GLES20.glUniformMatrix4fv(stUniform, 1, false, texMatrix, 0)
 
-        // Unit quad + standard UVs; rotation lives entirely in texMatrix.
-        val verts = floatArrayOf(
-            0f, 0f, 0f, 0f,
-            1f, 0f, 1f, 0f,
-            0f, 1f, 0f, 1f,
-            1f, 1f, 1f, 1f
-        )
         val buf = ByteBuffer.allocateDirect(verts.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         buf.put(verts).position(0)
         val stride = 4 * 4

@@ -140,6 +140,43 @@ object WallpaperLayout {
         }
     }
 
+    /**
+     * Video GL quad matching WallpaperSwitcher: interleaved NDC x,y + UV,
+     * triangle-strip BL→BR→TL→TR, with UV (0,0) at bottom-left (SurfaceTexture).
+     * Pass already-swapped [vidW]/[vidH] when an extra 90° UV turn will be applied.
+     */
+    fun computeVideoQuad(
+        vidW: Float,
+        vidH: Float,
+        screenW: Float,
+        screenH: Float,
+        mode: WallpaperScaleMode
+    ): FloatArray {
+        if (vidW <= 0f || vidH <= 0f || screenW <= 0f || screenH <= 0f) {
+            return floatArrayOf(
+                -1f, -1f, 0f, 0f,
+                1f, -1f, 1f, 0f,
+                -1f, 1f, 0f, 1f,
+                1f, 1f, 1f, 1f
+            )
+        }
+        val va = vidW / vidH
+        val sa = screenW / screenH
+        val (dw, dh) = when (mode) {
+            WallpaperScaleMode.FIT ->
+                if (va > sa) 1f to (sa / va) else (va / sa) to 1f
+            WallpaperScaleMode.FILL ->
+                if (va > sa) (va / sa) to 1f else 1f to (sa / va)
+            WallpaperScaleMode.STRETCH -> 1f to 1f
+        }
+        return floatArrayOf(
+            -dw, -dh, 0f, 0f,
+            dw, -dh, 1f, 0f,
+            -dw, dh, 0f, 1f,
+            dw, dh, 1f, 1f
+        )
+    }
+
     fun nearlySquare(w: Int, h: Int, epsilon: Float = 0.08f): Boolean {
         if (w <= 0 || h <= 0) return true
         return abs(w.toFloat() / h - 1f) < epsilon
