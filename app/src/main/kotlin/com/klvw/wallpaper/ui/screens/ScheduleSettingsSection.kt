@@ -4,8 +4,13 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,26 +20,35 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.ScheduleGroup
@@ -44,6 +58,8 @@ import com.klvw.wallpaper.schedule.ScheduleMath
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 import com.klvw.wallpaper.util.PermissionUtils
 import java.util.UUID
+import kotlinx.coroutines.flow.distinctUntilChanged
+
 
 @Composable
 fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
@@ -306,6 +322,7 @@ private fun RuleRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RuleEditorDialog(
     rule: ScheduleRule,
@@ -314,8 +331,7 @@ private fun RuleEditorDialog(
     onConfirm: (ScheduleRule) -> Unit
 ) {
     var draft by remember(rule.id) { mutableStateOf(rule) }
-    var startText by remember(rule.id) { mutableStateOf(ScheduleMath.formatMinute(rule.startMinute)) }
-    var endText by remember(rule.id) { mutableStateOf(ScheduleMath.formatMinute(rule.endMinute)) }
+    var picking by remember { mutableStateOf<TimePickTarget?>(null) }
     LaunchedEffect(rule.folderUri) {
         draft = draft.copy(folderUri = rule.folderUri)
     }
@@ -351,19 +367,16 @@ private fun RuleEditorDialog(
                         label = { Text("视频") }
                     )
                 }
-                OutlinedTextField(
-                    value = startText,
-                    onValueChange = { startText = it },
-                    label = { Text("开始 HH:mm") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                Text("时段", style = MaterialTheme.typography.labelMedium)
+                TimeFieldRow(
+                    label = "开始",
+                    minute = draft.startMinute,
+                    onClick = { picking = TimePickTarget.START }
                 )
-                OutlinedTextField(
-                    value = endText,
-                    onValueChange = { endText = it },
-                    label = { Text("结束 HH:mm（含；跨午夜可小于开始）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                TimeFieldRow(
+                    label = "结束（含；跨午夜可小于开始）",
+                    minute = draft.endMinute,
+                    onClick = { picking = TimePickTarget.END }
                 )
                 TextButton(onClick = { onPickFolder(draft) }) {
                     Text(if (draft.folderUri.isBlank()) "选择文件夹" else "更换文件夹")
@@ -380,21 +393,197 @@ private fun RuleEditorDialog(
         confirmButton = {
             val ctx = LocalContext.current
             Button(onClick = {
-                val start = ScheduleMath.parseMinute(startText)
-                val end = ScheduleMath.parseMinute(endText)
-                if (start == null || end == null) {
-                    Toast.makeText(ctx, "时间格式应为 HH:mm", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
                 if (draft.folderUri.isBlank()) {
                     Toast.makeText(ctx, "请选择文件夹", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                onConfirm(draft.copy(startMinute = start, endMinute = end))
+                onConfirm(draft)
             }) { Text("确定") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
+
+    picking?.let { target ->
+        val initial = if (target == TimePickTarget.START) draft.startMinute else draft.endMinute
+        val title = if (target == TimePickTarget.START) "选择开始时间" else "选择结束时间"
+        WheelTimePickerSheet(
+            title = title,
+            initialMinute = initial,
+            onDismiss = { picking = null },
+            onConfirm = { minute ->
+                draft = if (target == TimePickTarget.START) {
+                    draft.copy(startMinute = minute)
+                } else {
+                    draft.copy(endMinute = minute)
+                }
+                picking = null
+            }
+        )
+    }
+}
+
+private enum class TimePickTarget { START, END }
+
+@Composable
+private fun TimeFieldRow(
+    label: String,
+    minute: Int,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            ScheduleMath.formatMinute(minute),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WheelTimePickerSheet(
+    title: String,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var hour by remember { mutableIntStateOf((initialMinute / 60).coerceIn(0, 23)) }
+    var minute by remember { mutableIntStateOf((initialMinute % 60).coerceIn(0, 59)) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 28.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onDismiss) { Text("取消") }
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = { onConfirm(hour * 60 + minute) }) { Text("确定") }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NumberWheel(
+                    values = (0..23).toList(),
+                    selected = hour,
+                    onSelected = { hour = it },
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    ":",
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+                NumberWheel(
+                    values = (0..59).toList(),
+                    selected = minute,
+                    onSelected = { minute = it },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NumberWheel(
+    values: List<Int>,
+    selected: Int,
+    onSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    visibleCount: Int = 5
+) {
+    val itemHeight = 40.dp
+    val density = LocalDensity.current
+    val itemHeightPx = with(density) { itemHeight.toPx() }
+    val initialIndex = values.indexOf(selected).coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val fling = rememberSnapFlingBehavior(lazyListState = listState)
+    val verticalPad = itemHeight * ((visibleCount - 1) / 2)
+
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val offset = listState.firstVisibleItemScrollOffset
+            val index = listState.firstVisibleItemIndex + if (offset > itemHeightPx / 2f) 1 else 0
+            index.coerceIn(0, values.lastIndex)
+        }
+            .distinctUntilChanged()
+            .collect { idx -> onSelected(values[idx]) }
+    }
+
+    Box(modifier = modifier.height(itemHeight * visibleCount)) {
+        LazyColumn(
+            state = listState,
+            flingBehavior = fling,
+            contentPadding = PaddingValues(vertical = verticalPad),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            itemsIndexed(values) { _, value ->
+                val isSelected = value == selected
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(itemHeight),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "%02d".format(value),
+                        fontSize = if (isSelected) 22.sp else 16.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.alpha(if (isSelected) 1f else 0.45f)
+                    )
+                }
+            }
+        }
+        HorizontalDivider(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .offset(y = -itemHeight / 2),
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        HorizontalDivider(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .offset(y = itemHeight / 2),
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+    }
 }
