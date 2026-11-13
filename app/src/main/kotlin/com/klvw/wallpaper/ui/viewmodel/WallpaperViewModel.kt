@@ -18,6 +18,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 enum class MediaTab { IMAGE, STATIC, VIDEO }
@@ -70,13 +71,21 @@ class WallpaperViewModel @Inject constructor(
     // In-memory cache — avoids async prefs reads on every tab switch
     private var savedImageFolderUri: String? = null
     private var savedVideoFolderUri: String? = null
+    /** Drops stale folder scans when the user switches tabs/folders quickly. */
+    private val previewLoadGeneration = AtomicInteger(0)
 
     init {
         viewModelScope.launch {
             // Load persisted folder selections once before first emit
             savedImageFolderUri = prefs.activeImageFolderUri.first()
             savedVideoFolderUri = prefs.activeVideoFolderUri.first()
-            _state.update { it.copy(selectedFolderUri = savedImageFolderUri) }
+            _state.update {
+                it.copy(
+                    selectedFolderUri = savedImageFolderUri,
+                    isLoadingPreview = true,
+                    previewItems = emptyList()
+                )
+            }
 
             combine(
                 folderRepository.getFoldersByType(FolderType.IMAGE),
@@ -171,13 +180,24 @@ class WallpaperViewModel @Inject constructor(
     }
 
     fun setMediaTab(tab: MediaTab) {
+        if (_state.value.isLoadingPreview && _state.value.mediaTab == tab) return
         val folderUri = when (tab) {
             MediaTab.IMAGE -> savedImageFolderUri
             MediaTab.VIDEO -> savedVideoFolderUri
             MediaTab.STATIC -> null
         }
-        _state.update { it.copy(mediaTab = tab, selectedItem = null, selectedFolderUri = folderUri) }
-        loadPreviewItems(clearFirst = true)
+        // Clear grid in the same frame as the tab change so image thumbs never
+        // sit under the video tab (or vice versa) while SAF scan is slow.
+        _state.update {
+            it.copy(
+                mediaTab = tab,
+                selectedItem = null,
+                selectedFolderUri = folderUri,
+                previewItems = emptyList(),
+                isLoadingPreview = true
+            )
+        }
+        loadPreviewItems(clearFirst = false)
     }
 
     fun setTarget(target: WallpaperTarget) {
@@ -185,15 +205,24 @@ class WallpaperViewModel @Inject constructor(
     }
 
     fun selectItem(item: WallpaperItem) {
+        if (_state.value.isLoadingPreview) return
         _state.update { it.copy(selectedItem = item) }
     }
 
     fun selectFolder(folderUri: String?) {
+        if (_state.value.isLoadingPreview) return
         val tab = _state.value.mediaTab
         if (tab == MediaTab.IMAGE) savedImageFolderUri = folderUri
         else if (tab == MediaTab.VIDEO) savedVideoFolderUri = folderUri
-        _state.update { it.copy(selectedFolderUri = folderUri, selectedItem = null) }
-        loadPreviewItems(clearFirst = true)
+        _state.update {
+            it.copy(
+                selectedFolderUri = folderUri,
+                selectedItem = null,
+                previewItems = emptyList(),
+                isLoadingPreview = true
+            )
+        }
+        loadPreviewItems(clearFirst = false)
         viewModelScope.launch {
             if (tab == MediaTab.IMAGE) prefs.setActiveImageFolder(folderUri)
             else if (tab == MediaTab.VIDEO) prefs.setActiveVideoFolder(folderUri)
@@ -314,11 +343,15 @@ class WallpaperViewModel @Inject constructor(
     }
 
     private fun loadPreviewItems(clearFirst: Boolean = false) {
+        val gen = previewLoadGeneration.incrementAndGet()
         viewModelScope.launch(Dispatchers.IO) {
-            if (clearFirst) _state.update { it.copy(isLoadingPreview = true, previewItems = emptyList()) }
+            if (clearFirst) {
+                _state.update { it.copy(isLoadingPreview = true, previewItems = emptyList()) }
+            }
             val s = _state.value
+            val tab = s.mediaTab
             val selUri = s.selectedFolderUri
-            val items = when (s.mediaTab) {
+            val items = when (tab) {
                 MediaTab.STATIC -> s.staticImages
                 MediaTab.IMAGE -> when {
                     selUri == null ->
@@ -337,6 +370,10 @@ class WallpaperViewModel @Inject constructor(
                             ?: emptyList()
                 }
             }
+            if (gen != previewLoadGeneration.get()) return@launch
+            // Tab/folder may have changed while scanning — only apply matching results.
+            val latest = _state.value
+            if (latest.mediaTab != tab || latest.selectedFolderUri != selUri) return@launch
             _state.update { it.copy(previewItems = items, isLoadingPreview = false) }
         }
     }

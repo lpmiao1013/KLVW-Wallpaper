@@ -127,6 +127,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
         Spacer(Modifier.height(8.dp))
 
         // Three-tab selector: Image | Static | Video
+        val tabsEnabled = !state.isLoadingPreview
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -137,19 +138,24 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
         ) {
             listOf(MediaTab.IMAGE to "图片", MediaTab.STATIC to "静态", MediaTab.VIDEO to "视频").forEach { (tab, label) ->
                 val selected = state.mediaTab == tab
+                val labelColor = when {
+                    selected -> MaterialTheme.colorScheme.onPrimary
+                    tabsEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                }
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                        .clickable { viewModel.setMediaTab(tab) }
+                        .clickable(enabled = tabsEnabled && !selected) { viewModel.setMediaTab(tab) }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         label,
                         style = MaterialTheme.typography.labelLarge,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = labelColor
                     )
                 }
             }
@@ -178,7 +184,8 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
             val hasMultiple = folders.size > 1
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
-                    onClick = { if (hasMultiple) folderMenuExpanded = true },
+                    onClick = { if (hasMultiple && tabsEnabled) folderMenuExpanded = true },
+                    enabled = tabsEnabled,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
@@ -226,9 +233,29 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
         when {
             state.isLoadingPreview -> {
                 Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SurfaceGlass),
                     contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            when (state.mediaTab) {
+                                MediaTab.STATIC -> "加载中…"
+                                MediaTab.IMAGE -> "正在加载图片…"
+                                MediaTab.VIDEO -> "正在加载视频…"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
             state.previewItems.isEmpty() -> {
                 Box(

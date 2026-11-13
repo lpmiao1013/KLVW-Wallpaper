@@ -27,6 +27,7 @@ import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.util.DisplayUtils
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
@@ -55,6 +56,7 @@ class VideoRenderer(
 
     private var surfaceHolder: SurfaceHolder? = null
     private var intentionalRelease = false
+    private var currentUri: Uri? = null
 
     private var glThread: HandlerThread? = null
     private var glHandler: Handler? = null
@@ -108,6 +110,26 @@ class VideoRenderer(
             0f, 0f, 1f, 0f,
             1f, 0f, 0f, 1f
         )
+
+        /** In-process resume points for the same video URI across engine reloads. */
+        private val resumePositionByUri = ConcurrentHashMap<String, Long>()
+        private const val MIN_RESUME_MS = 1_000L
+        private const val END_MARGIN_MS = 1_500L
+
+        private fun rememberPosition(uriKey: String, positionMs: Long, durationMs: Long) {
+            if (positionMs < MIN_RESUME_MS) {
+                resumePositionByUri.remove(uriKey)
+                return
+            }
+            if (durationMs > 0 && positionMs >= durationMs - END_MARGIN_MS) {
+                resumePositionByUri.remove(uriKey)
+                return
+            }
+            resumePositionByUri[uriKey] = positionMs
+        }
+
+        private fun resumePositionFor(uriKey: String): Long =
+            resumePositionByUri[uriKey] ?: 0L
     }
 
     private val playerListener = object : Player.Listener {
@@ -141,6 +163,7 @@ class VideoRenderer(
         intentionalRelease = false
         val gen = generation.incrementAndGet()
         surfaceHolder = holder
+        currentUri = uri
         this.scaleMode = scaleMode
         this.rotateMismatchEnabled = rotateMismatchEnabled
         this.rotateMismatchCw = rotateMismatchCw
@@ -151,6 +174,7 @@ class VideoRenderer(
         val probed = probeDisplaySize(uri)
         videoW = probed.first
         videoH = probed.second
+        val startPositionMs = resumePositionFor(uri.toString())
 
         val thread = HandlerThread("KLVW-VideoGL").also { it.start() }
         glThread = thread
@@ -170,7 +194,7 @@ class VideoRenderer(
                 }, handler)
                 decoderSurface = Surface(st)
 
-                val exo = buildPlayer(uri)
+                val exo = buildPlayer(uri, startPositionMs)
                 exo.setVideoSurface(decoderSurface)
                 exo.addListener(playerListener)
                 exo.prepare()
@@ -181,7 +205,7 @@ class VideoRenderer(
                 // Keep wallpaper switching working even if GL path fails.
                 try {
                     releaseGlOnly()
-                    startSurfaceHolderFallback(uri, holder, scaleMode, gen)
+                    startSurfaceHolderFallback(uri, holder, scaleMode, gen, startPositionMs)
                 } catch (_: Throwable) {
                     releaseGlOnly()
                 }
@@ -193,11 +217,12 @@ class VideoRenderer(
         uri: Uri,
         holder: SurfaceHolder,
         scaleMode: WallpaperScaleMode,
-        gen: Int
+        gen: Int,
+        startPositionMs: Long
     ) {
         if (gen != generation.get()) return
         usingGlPath = false
-        val exo = buildPlayer(uri)
+        val exo = buildPlayer(uri, startPositionMs)
         exo.videoScalingMode = when (scaleMode) {
             WallpaperScaleMode.FIT -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             WallpaperScaleMode.FILL, WallpaperScaleMode.STRETCH ->
@@ -210,12 +235,26 @@ class VideoRenderer(
         player = exo
     }
 
-    private fun buildPlayer(uri: Uri): ExoPlayer =
+    private fun buildPlayer(uri: Uri, startPositionMs: Long = 0L): ExoPlayer =
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(uri))
+            // Same-URI resume: start at last remembered position (0 = beginning).
+            setMediaItem(MediaItem.fromUri(uri), startPositionMs.coerceAtLeast(0L))
             repeatMode = Player.REPEAT_MODE_ONE
             volume = 0f
         }
+
+    private fun persistCurrentPosition(
+        uriKey: String? = currentUri?.toString(),
+        p: ExoPlayer? = player
+    ) {
+        if (uriKey == null || p == null) return
+        try {
+            val pos = p.currentPosition
+            val dur = p.duration
+            rememberPosition(uriKey, pos, if (dur == C.TIME_UNSET) 0L else dur)
+        } catch (_: Exception) {
+        }
+    }
 
     fun detachSurface() {
         val handler = glHandler
@@ -233,7 +272,12 @@ class VideoRenderer(
         }
     }
 
-    fun pause() = postToPlayerThread { try { player?.pause() } catch (_: Exception) {} }
+    fun pause() = postToPlayerThread {
+        try {
+            persistCurrentPosition()
+            player?.pause()
+        } catch (_: Exception) {}
+    }
     fun resume() = postToPlayerThread { try { player?.play() } catch (_: Exception) {} }
 
     /**
@@ -246,18 +290,22 @@ class VideoRenderer(
         val handler = glHandler
         val thread = glThread
         val holder = surfaceHolder
+        val uriKey = currentUri?.toString()
+        val p = player
         glHandler = null
         glThread = null
         surfaceHolder = null
         usingGlPath = false
+        // Clear before load() assigns the next URI (async release must not save under wrong key).
+        currentUri = null
 
         if (handler != null && thread != null && thread.isAlive) {
             handler.post {
-                releasePlayerAndGl(holder)
+                releasePlayerAndGl(holder, uriKey, p)
                 thread.quitSafely()
             }
         } else {
-            releasePlayerAndGl(holder)
+            releasePlayerAndGl(holder, uriKey, p)
         }
     }
 
@@ -271,13 +319,16 @@ class VideoRenderer(
         val handler = glHandler
         val thread = glThread
         val holder = surfaceHolder
+        val uriKey = currentUri?.toString()
+        val p = player
         glHandler = null
         glThread = null
         surfaceHolder = null
         usingGlPath = false
+        currentUri = null
 
         if (handler == null || thread == null || !thread.isAlive) {
-            releasePlayerAndGl(holder)
+            releasePlayerAndGl(holder, uriKey, p)
             // Brief settle so the next eglCreateWindowSurface can attach.
             delay(32)
             return
@@ -286,14 +337,14 @@ class VideoRenderer(
         suspendCancellableCoroutine { cont ->
             val posted = handler.post {
                 try {
-                    releasePlayerAndGl(holder)
+                    releasePlayerAndGl(holder, uriKey, p)
                 } finally {
                     thread.quitSafely()
                     if (cont.isActive) cont.resume(Unit)
                 }
             }
             if (!posted && cont.isActive) {
-                releasePlayerAndGl(holder)
+                releasePlayerAndGl(holder, uriKey, p)
                 thread.quitSafely()
                 cont.resume(Unit)
             }
@@ -305,16 +356,22 @@ class VideoRenderer(
         delay(32)
     }
 
-    private fun releasePlayerAndGl(holder: SurfaceHolder? = surfaceHolder) {
-        try { player?.removeListener(playerListener) } catch (_: Exception) {}
-        try { player?.stop() } catch (_: Exception) {}
-        try { player?.clearVideoSurface() } catch (_: Exception) {}
+    private fun releasePlayerAndGl(
+        holder: SurfaceHolder? = surfaceHolder,
+        uriKey: String? = currentUri?.toString(),
+        p: ExoPlayer? = player
+    ) {
+        persistCurrentPosition(uriKey, p)
+        val active = p ?: player
+        try { active?.removeListener(playerListener) } catch (_: Exception) {}
+        try { active?.stop() } catch (_: Exception) {}
+        try { active?.clearVideoSurface() } catch (_: Exception) {}
         // Fallback path used setVideoSurfaceHolder — clearVideoSurface alone is not enough.
         if (holder != null) {
-            try { player?.clearVideoSurfaceHolder(holder) } catch (_: Exception) {}
+            try { active?.clearVideoSurfaceHolder(holder) } catch (_: Exception) {}
         }
-        try { player?.release() } catch (_: Exception) {}
-        player = null
+        try { active?.release() } catch (_: Exception) {}
+        if (player === active || p == null) player = null
         releaseGlOnly()
     }
 
