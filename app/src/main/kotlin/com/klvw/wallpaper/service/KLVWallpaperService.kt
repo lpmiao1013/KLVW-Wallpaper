@@ -96,7 +96,11 @@ class KLVWallpaperService : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+            registerReceiver(
+                screenOffReceiver,
+                IntentFilter(Intent.ACTION_SCREEN_OFF),
+                Context.RECEIVER_NOT_EXPORTED
+            )
             // Seed with persisted value so the very first onComputeColors() call is correct.
             prefs.homeWallpaperIsLightCache.value?.let { isLight ->
                 computedWallpaperColors = if (isLight) syntheticWhiteColors else syntheticBlackColors
@@ -210,16 +214,18 @@ class KLVWallpaperService : WallpaperService() {
             }
         }
 
-        override fun onTouchEvent(event: MotionEvent) {
-            if (event.actionMasked != MotionEvent.ACTION_UP) return
-            val now = SystemClock.uptimeMillis()
-            val timeout = ViewConfiguration.getDoubleTapTimeout().toLong()
-            if (lastTapUptimeMs > 0L && now - lastTapUptimeMs <= timeout) {
-                lastTapUptimeMs = 0L
-                advanceByDoubleTap()
-            } else {
-                lastTapUptimeMs = now
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (event.actionMasked == MotionEvent.ACTION_UP) {
+                val now = SystemClock.uptimeMillis()
+                val timeout = ViewConfiguration.getDoubleTapTimeout().toLong()
+                if (lastTapUptimeMs > 0L && now - lastTapUptimeMs <= timeout) {
+                    lastTapUptimeMs = 0L
+                    advanceByDoubleTap()
+                } else {
+                    lastTapUptimeMs = now
+                }
             }
+            return true
         }
 
         private fun advanceByDoubleTap() {

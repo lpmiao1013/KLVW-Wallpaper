@@ -67,11 +67,16 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
                 description = "Shows running timer status on screen unlock"
             }
         )
-        registerReceiver(ScreenUnlockReceiver(), IntentFilter(Intent.ACTION_USER_PRESENT))
+        registerReceiver(
+            ScreenUnlockReceiver(),
+            IntentFilter(Intent.ACTION_USER_PRESENT),
+            Context.RECEIVER_NOT_EXPORTED
+        )
 
         val powerManager = getSystemService(PowerManager::class.java)
         val screenOn = MutableStateFlow(powerManager?.isInteractive == true)
-        registerReceiver(object : BroadcastReceiver() {
+        registerReceiver(
+            object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 screenOn.value = intent.action == Intent.ACTION_SCREEN_ON
                 if (intent.action == Intent.ACTION_SCREEN_OFF) {
@@ -113,10 +118,13 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
                     }
                 }
             }
-        }, IntentFilter().apply {
+        },
+            IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
-        })
+            },
+            Context.RECEIVER_NOT_EXPORTED
+        )
 
         // Schedule auto-unmount whenever Aer is mounted, based on user pref
         AerLockStore.addListener { isLocked ->
@@ -134,11 +142,15 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
         // Screen-off alone is NOT enough — the watch is typically used while the phone is
         // pocketed (screen off). Doze means the device is truly idle and the BT radio can sleep.
         val serverActive = MutableStateFlow(powerManager?.isDeviceIdleMode != true)
-        registerReceiver(object : BroadcastReceiver() {
+        registerReceiver(
+            object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 serverActive.value = powerManager?.isDeviceIdleMode != true
             }
-        }, IntentFilter(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED))
+            },
+            IntentFilter(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED),
+            Context.RECEIVER_NOT_EXPORTED
+        )
 
         // Start Bluetooth RFCOMM server — watch connects directly over classic BT.
         BtConfigServer(this, prefs, timerManager, appScope) { data ->

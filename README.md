@@ -319,6 +319,87 @@ KLVW registers a broadcast receiver for the action `com.klvw.wallpaper.SET_WALLP
 
 ---
 
+## 打包说明（GitHub Actions / 本机）
+
+本仓库 **不要提交** 签名证书和密码：
+
+- `app/klvw-release.keystore`（或任何 `*.keystore` / `*.jks`）
+- `keystore.properties`
+
+模板见根目录 `keystore.properties.example`。
+
+### 推荐：GitHub Actions 打正式包
+
+当前 workflow：`.github/workflows/build.yml`
+
+- push 到 `main` / `master` → 默认打 **release**
+- Actions 页可手动选 `release` 或 `debug`
+- 产物在 run 页面的 **Artifacts**（`klvw-wallpaper-release` / `klvw-wallpaper-debug`）
+
+#### 1. 配置 4 个 Repository Secrets（名称必须完全一致）
+
+仓库 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+
+| Name（固定） | Secret 填什么 |
+|---|---|
+| `KEYSTORE_BASE64` | 证书文件的 base64 整段 |
+| `KEYSTORE_PASSWORD` | 密钥库密码 |
+| `KEY_ALIAS` | 证书别名 |
+| `KEY_PASSWORD` | 密钥密码 |
+
+#### 2. 生成本机证书的 base64（PowerShell 一行）
+
+证书默认放在项目内：`app/klvw-release.keystore`（已被 gitignore）。
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("D:\lpm_pro\KLVW-Wallpaper\app\klvw-release.keystore")) | Set-Clipboard
+```
+
+执行后 Ctrl+V 贴进 `KEYSTORE_BASE64` 的 Secret 框。路径按你机器上的实际位置改。
+
+也可用 `gh`（需已登录）：
+
+```powershell
+cd D:\lpm_pro\KLVW-Wallpaper
+gh secret set KEYSTORE_BASE64 --body ([Convert]::ToBase64String([IO.File]::ReadAllBytes("app\klvw-release.keystore")))
+gh secret set KEYSTORE_PASSWORD --body "你的密钥库密码"
+gh secret set KEY_ALIAS --body "你的别名"
+gh secret set KEY_PASSWORD --body "你的密钥密码"
+```
+
+#### 3. 推送后下载
+
+```text
+git push
+→ GitHub → Actions → Build APK → Artifacts → klvw-wallpaper-release
+```
+
+未配置 `KEYSTORE_BASE64` 时，release 会退回 debug 签名（能装，但不是你的正式证书）。
+
+### 可选：本机打包
+
+需要本机同时有：
+
+1. **JDK 17+**（可进 PATH，或当前终端临时指定）
+2. **Android SDK**（写到 `local.properties` 的 `sdk.dir=...`，该文件已 gitignore）
+3. 根目录 `keystore.properties`（从 `keystore.properties.example` 复制并填好）
+
+示例（仅当前终端有效，关掉窗口需重设）：
+
+```powershell
+cd D:\lpm_pro\KLVW-Wallpaper
+$env:JAVA_HOME = "C:\Users\admin\.jabba\jdk\system@17.0.19"
+$env:Path = "$env:JAVA_HOME\bin;" + $env:Path
+.\gradlew :app:assembleRelease
+```
+
+正式包输出：`app/build/outputs/apk/release/`
+
+没有 Android SDK 时不要强行本机编，直接用上面的 GitHub Actions 即可。
+
+---
+
 ## License
 
 Private / personal use. All rights reserved.
+

@@ -14,8 +14,10 @@ import android.opengl.GLES20
 import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.view.Surface
 import android.view.SurfaceHolder
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -26,19 +28,26 @@ import com.klvw.wallpaper.util.DisplayUtils
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Video live-wallpaper renderer.
  *
- * ExoPlayer → SurfaceTexture (OES) → GLES onto the wallpaper [SurfaceHolder],
- * so FIT / FILL / STRETCH and optional 90° mismatch rotate actually apply.
- * (Direct SurfaceHolder playback ignores ExoPlayer videoScalingMode.)
+ * Preferred path: ExoPlayer → SurfaceTexture (OES) → GLES onto the wallpaper
+ * SurfaceHolder, so FIT / FILL / STRETCH and optional 90° rotate apply.
+ *
+ * Fallback: direct SurfaceHolder playback (scale mode limited by ExoPlayer) if
+ * EGL/GL setup fails — keeps double-tap / timer / unlock wallpaper changes alive.
  */
 class VideoRenderer(
     private val context: Context,
     private val displayUtils: DisplayUtils
 ) {
-    private var player: ExoPlayer? = null
+    private val generation = AtomicInteger(0)
+
+    @Volatile private var player: ExoPlayer? = null
+    @Volatile private var usingGlPath = false
+
     private var surfaceHolder: SurfaceHolder? = null
     private var intentionalRelease = false
 
@@ -76,19 +85,19 @@ class VideoRenderer(
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
             if (!intentionalRelease) {
-                try { player?.prepare() } catch (_: Exception) {}
+                postToPlayerThread { try { player?.prepare() } catch (_: Exception) {} }
             }
         }
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_IDLE && !intentionalRelease) {
-                try { player?.prepare() } catch (_: Exception) {}
+                postToPlayerThread { try { player?.prepare() } catch (_: Exception) {} }
             }
         }
         override fun onVideoSizeChanged(videoSize: VideoSize) {
             if (videoSize.width > 0 && videoSize.height > 0) {
                 videoW = videoSize.width
                 videoH = videoSize.height
-                glHandler?.post { requestDraw() }
+                glHandler?.post { if (usingGlPath) requestDraw() }
             }
         }
     }
@@ -102,6 +111,7 @@ class VideoRenderer(
     ) {
         release()
         intentionalRelease = false
+        val gen = generation.incrementAndGet()
         surfaceHolder = holder
         this.scaleMode = scaleMode
         this.rotateMismatchEnabled = rotateMismatchEnabled
@@ -120,6 +130,7 @@ class VideoRenderer(
         glHandler = handler
 
         handler.post {
+            if (gen != generation.get()) return@post
             try {
                 setupEgl(holder)
                 setupGl()
@@ -127,70 +138,120 @@ class VideoRenderer(
                 if (videoW > 0 && videoH > 0) st.setDefaultBufferSize(videoW, videoH)
                 st.setOnFrameAvailableListener({
                     frameAvailable.set(true)
-                    handler.post { drainAndDraw() }
+                    handler.post { if (gen == generation.get()) drainAndDraw() }
                 }, handler)
                 decoderSurface = Surface(st)
 
-        val exo = ExoPlayer.Builder(context).build()
-        exo.setMediaItem(MediaItem.fromUri(uri))
-        exo.repeatMode = Player.REPEAT_MODE_ONE
-        exo.volume = 0f
+                val exo = buildPlayer(uri)
                 exo.setVideoSurface(decoderSurface)
+                exo.addListener(playerListener)
+                exo.prepare()
+                exo.playWhenReady = true
+                player = exo
+                usingGlPath = true
+            } catch (_: Throwable) {
+                // Keep wallpaper switching working even if GL path fails.
+                try {
+                    releaseGlOnly()
+                    startSurfaceHolderFallback(uri, holder, scaleMode, gen)
+                } catch (_: Throwable) {
+                    releaseGlOnly()
+                }
+            }
+        }
+    }
+
+    private fun startSurfaceHolderFallback(
+        uri: Uri,
+        holder: SurfaceHolder,
+        scaleMode: WallpaperScaleMode,
+        gen: Int
+    ) {
+        if (gen != generation.get()) return
+        usingGlPath = false
+        val exo = buildPlayer(uri)
+        exo.videoScalingMode = when (scaleMode) {
+            WallpaperScaleMode.FIT -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            WallpaperScaleMode.FILL, WallpaperScaleMode.STRETCH ->
+                C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+        exo.setVideoSurfaceHolder(holder)
         exo.addListener(playerListener)
         exo.prepare()
         exo.playWhenReady = true
         player = exo
-            } catch (_: Throwable) {
-                releaseOnGlThread()
-            }
-        }
     }
+
+    private fun buildPlayer(uri: Uri): ExoPlayer =
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(uri))
+            repeatMode = Player.REPEAT_MODE_ONE
+            volume = 0f
+        }
 
     fun detachSurface() {
-        // Wallpaper surface going away — stop drawing; player may still hold decoder surface.
-        glHandler?.post {
-            if (eglSurf != EGL14.EGL_NO_SURFACE) {
-                EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-                EGL14.eglDestroySurface(display, eglSurf)
-                eglSurf = EGL14.EGL_NO_SURFACE
+        val handler = glHandler
+        if (handler != null) {
+            handler.post {
+                try { player?.clearVideoSurface() } catch (_: Exception) {}
+                if (eglSurf != EGL14.EGL_NO_SURFACE) {
+                    EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
+                    EGL14.eglDestroySurface(display, eglSurf)
+                    eglSurf = EGL14.EGL_NO_SURFACE
+                }
             }
+        } else {
+            try { player?.clearVideoSurfaceHolder(surfaceHolder) } catch (_: Exception) {}
         }
     }
 
-    fun pause() { try { player?.pause() } catch (_: Exception) {} }
-    fun resume() { try { player?.play() } catch (_: Exception) {} }
+    fun pause() = postToPlayerThread { try { player?.pause() } catch (_: Exception) {} }
+    fun resume() = postToPlayerThread { try { player?.play() } catch (_: Exception) {} }
 
+    /** Non-blocking: never stall the wallpaper engine / main thread. */
     fun release() {
         intentionalRelease = true
+        generation.incrementAndGet()
         val handler = glHandler
         val thread = glThread
+        glHandler = null
+        glThread = null
+        surfaceHolder = null
+
         if (handler != null && thread != null && thread.isAlive) {
-            val done = Object()
             handler.post {
-        try { player?.removeListener(playerListener) } catch (_: Exception) {}
-        try { player?.stop() } catch (_: Exception) {}
-        try { player?.release() } catch (_: Exception) {}
-        player = null
-                releaseOnGlThread()
-                synchronized(done) { done.notifyAll() }
+                try { player?.removeListener(playerListener) } catch (_: Exception) {}
+                try { player?.stop() } catch (_: Exception) {}
+                try { player?.release() } catch (_: Exception) {}
+                player = null
+                releaseGlOnly()
+                thread.quitSafely()
             }
-            try {
-                synchronized(done) { done.wait(1500L) }
-            } catch (_: InterruptedException) {}
-            thread.quitSafely()
         } else {
             try { player?.removeListener(playerListener) } catch (_: Exception) {}
             try { player?.release() } catch (_: Exception) {}
             player = null
         }
-        glHandler = null
-        glThread = null
-        surfaceHolder = null
+        usingGlPath = false
+    }
+
+    private fun postToPlayerThread(block: () -> Unit) {
+        val handler = glHandler
+        if (handler != null) handler.post(block)
+        else if (Looper.myLooper() == Looper.getMainLooper()) {
+            // Fallback player may live on caller thread during brief windows.
+            try { block() } catch (_: Exception) {}
+        } else {
+            Handler(Looper.getMainLooper()).post {
+                try { block() } catch (_: Exception) {}
+            }
+        }
     }
 
     private fun setupEgl(holder: SurfaceHolder) {
         display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-        EGL14.eglInitialize(display, null, 0, null, 0)
+        check(display != EGL14.EGL_NO_DISPLAY) { "eglGetDisplay failed" }
+        check(EGL14.eglInitialize(display, null, 0, null, 0)) { "eglInitialize failed" }
         val attribs = intArrayOf(
             EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
             EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8,
@@ -199,12 +260,18 @@ class VideoRenderer(
         )
         val cfgs = arrayOfNulls<EGLConfig>(1)
         val n = IntArray(1)
-        EGL14.eglChooseConfig(display, attribs, 0, cfgs, 0, 1, n, 0)
+        check(EGL14.eglChooseConfig(display, attribs, 0, cfgs, 0, 1, n, 0) && n[0] > 0) {
+            "eglChooseConfig failed"
+        }
         cfg = cfgs[0]!!
         val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
         eglCtx = EGL14.eglCreateContext(display, cfg!!, EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
-        eglSurf = EGL14.eglCreateWindowSurface(display, cfg!!, holder.surface, intArrayOf(EGL14.EGL_NONE), 0)
-        EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)
+        check(eglCtx != EGL14.EGL_NO_CONTEXT) { "eglCreateContext failed" }
+        val surface = holder.surface
+        check(surface != null && surface.isValid) { "wallpaper surface invalid" }
+        eglSurf = EGL14.eglCreateWindowSurface(display, cfg!!, surface, intArrayOf(EGL14.EGL_NONE), 0)
+        check(eglSurf != EGL14.EGL_NO_SURFACE) { "eglCreateWindowSurface failed" }
+        check(EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)) { "eglMakeCurrent failed" }
     }
 
     private fun setupGl() {
@@ -249,10 +316,11 @@ class VideoRenderer(
     }
 
     private fun requestDraw() {
+        if (!usingGlPath) return
         val st = surfaceTexture ?: return
         if (display == EGL14.EGL_NO_DISPLAY || eglSurf == EGL14.EGL_NO_SURFACE) return
         try {
-            EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)
+            if (!EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)) return
             st.updateTexImage()
             st.getTransformMatrix(stMatrix)
             drawFrame()
@@ -268,12 +336,10 @@ class VideoRenderer(
         val vh = videoH.coerceAtLeast(1)
 
         val rotate = WallpaperLayout.shouldAutoRotate(vw, vh, sw, sh, rotateMismatchEnabled)
-        // Match image path: layout using post-rotate size, rotate samples via UVs.
         val (cw, ch) = WallpaperLayout.effectiveSize(vw, vh, rotate)
         val dest = WallpaperLayout.destinationRect(cw, ch, sw, sh, scaleMode)
 
         Matrix.setIdentityM(mvpMatrix, 0)
-        // Pixel rect → NDC. Android Y grows down; GL Y grows up.
         val sx = 2f / sw
         val sy = -2f / sh
         Matrix.translateM(mvpMatrix, 0, -1f, 1f, 0f)
@@ -291,19 +357,10 @@ class VideoRenderer(
         GLES20.glUniformMatrix4fv(mvpUniform, 1, false, mvpMatrix, 0)
         GLES20.glUniformMatrix4fv(stUniform, 1, false, stMatrix, 0)
 
-        // Unit quad [0,1]² → dest. UVs optionally 90°-rotated to match image auto-rotate.
         val uv = when {
-            rotate && rotateMismatchCw -> floatArrayOf(
-                // (u,v) → (v, 1-u)  90° CW
-                0f, 1f,  0f, 0f,  1f, 1f,  1f, 0f
-            )
-            rotate && !rotateMismatchCw -> floatArrayOf(
-                // (u,v) → (1-v, u)  90° CCW
-                1f, 0f,  1f, 1f,  0f, 0f,  0f, 1f
-            )
-            else -> floatArrayOf(
-                0f, 0f,  1f, 0f,  0f, 1f,  1f, 1f
-            )
+            rotate && rotateMismatchCw -> floatArrayOf(0f, 1f, 0f, 0f, 1f, 1f, 1f, 0f)
+            rotate && !rotateMismatchCw -> floatArrayOf(1f, 0f, 1f, 1f, 0f, 0f, 0f, 1f)
+            else -> floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f)
         }
         val verts = floatArrayOf(
             0f, 0f, uv[0], uv[1],
@@ -325,7 +382,7 @@ class VideoRenderer(
         GLES20.glDisableVertexAttribArray(uvAttr)
     }
 
-    private fun releaseOnGlThread() {
+    private fun releaseGlOnly() {
         try { decoderSurface?.release() } catch (_: Exception) {}
         decoderSurface = null
         try { surfaceTexture?.release() } catch (_: Exception) {}
@@ -353,6 +410,7 @@ class VideoRenderer(
         }
         cfg = null
         frameAvailable.set(false)
+        usingGlPath = false
     }
 
     private fun compileShader(type: Int, src: String): Int {
@@ -372,7 +430,6 @@ class VideoRenderer(
         return p
     }
 
-    /** Display-oriented size (metadata rotation already applied). */
     private fun probeDisplaySize(uri: Uri): Pair<Int, Int> {
         return try {
             MediaMetadataRetriever().use { r ->

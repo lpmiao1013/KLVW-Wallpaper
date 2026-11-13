@@ -86,7 +86,11 @@ class KLVWallpaperServiceLock : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+            registerReceiver(
+                screenOffReceiver,
+                IntentFilter(Intent.ACTION_SCREEN_OFF),
+                Context.RECEIVER_NOT_EXPORTED
+            )
             // Seed with persisted value so the very first onComputeColors() call is correct.
             prefs.lockWallpaperIsLightCache.value?.let { isLight ->
                 computedWallpaperColors = if (isLight) syntheticWhiteColors else syntheticBlackColors
