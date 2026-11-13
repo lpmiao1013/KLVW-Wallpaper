@@ -177,7 +177,9 @@ class KLVWallpaperService : WallpaperService() {
                     HomeCollectQuad(state.first, state.second, scale, rotateEn, rotateCw)
                 }.collect { q ->
                     try {
-                        release()
+                        // Must await video GL teardown — async release kept the Surface busy,
+                        // so image EGL (and sometimes the next video) never attached.
+                        releaseRenderersSuspending()
                         val uri = q.uri ?: return@collect
                         isVideo = q.isVideo
                         val mode = WallpaperScaleMode.fromPref(q.scale)
@@ -269,6 +271,14 @@ class KLVWallpaperService : WallpaperService() {
             colorJob = null
             release()
             scope.cancel()
+        }
+
+        private suspend fun releaseRenderersSuspending() {
+            try { imageRenderer?.release() } catch (_: Throwable) {}
+            imageRenderer = null
+            try { videoRenderer?.releaseSuspending() } catch (_: Throwable) {}
+            videoRenderer = null
+            computedWallpaperColors = null
         }
 
         private fun release() {

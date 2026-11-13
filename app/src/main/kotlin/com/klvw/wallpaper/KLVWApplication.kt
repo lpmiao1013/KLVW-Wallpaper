@@ -67,10 +67,11 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
                 description = "Shows running timer status on screen unlock"
             }
         )
+        // USER_PRESENT is sent by the system; NOT_EXPORTED can drop it on some OEMs (unlock rotate dies).
         registerReceiver(
             ScreenUnlockReceiver(),
             IntentFilter(Intent.ACTION_USER_PRESENT),
-            Context.RECEIVER_NOT_EXPORTED
+            Context.RECEIVER_EXPORTED
         )
 
         val powerManager = getSystemService(PowerManager::class.java)

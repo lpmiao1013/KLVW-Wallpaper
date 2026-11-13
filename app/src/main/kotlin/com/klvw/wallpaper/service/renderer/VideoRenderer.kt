@@ -29,6 +29,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Video live-wallpaper renderer.
@@ -208,7 +210,10 @@ class VideoRenderer(
     fun pause() = postToPlayerThread { try { player?.pause() } catch (_: Exception) {} }
     fun resume() = postToPlayerThread { try { player?.play() } catch (_: Exception) {} }
 
-    /** Non-blocking: never stall the wallpaper engine / main thread. */
+    /**
+     * Fire-and-forget cleanup for onDestroy / detach.
+     * Prefer [releaseSuspending] before attaching an image EGL surface.
+     */
     fun release() {
         intentionalRelease = true
         generation.incrementAndGet()
@@ -217,22 +222,61 @@ class VideoRenderer(
         glHandler = null
         glThread = null
         surfaceHolder = null
+        usingGlPath = false
 
         if (handler != null && thread != null && thread.isAlive) {
             handler.post {
-                try { player?.removeListener(playerListener) } catch (_: Exception) {}
-                try { player?.stop() } catch (_: Exception) {}
-                try { player?.release() } catch (_: Exception) {}
-                player = null
-                releaseGlOnly()
+                releasePlayerAndGl()
                 thread.quitSafely()
             }
         } else {
-            try { player?.removeListener(playerListener) } catch (_: Exception) {}
-            try { player?.release() } catch (_: Exception) {}
-            player = null
+            releasePlayerAndGl()
         }
+    }
+
+    /**
+     * Wait until ExoPlayer + EGL window surface are gone so image renderer can bind.
+     * Async [release] left the wallpaper Surface busy → home image reloads looked “dead”.
+     */
+    suspend fun releaseSuspending() {
+        intentionalRelease = true
+        generation.incrementAndGet()
+        val handler = glHandler
+        val thread = glThread
+        glHandler = null
+        glThread = null
+        surfaceHolder = null
         usingGlPath = false
+
+        if (handler == null || thread == null || !thread.isAlive) {
+            releasePlayerAndGl()
+            return
+        }
+
+        suspendCancellableCoroutine { cont ->
+            val posted = handler.post {
+                try {
+                    releasePlayerAndGl()
+                } finally {
+                    thread.quitSafely()
+                    if (cont.isActive) cont.resume(Unit)
+                }
+            }
+            if (!posted && cont.isActive) {
+                releasePlayerAndGl()
+                thread.quitSafely()
+                cont.resume(Unit)
+            }
+        }
+    }
+
+    private fun releasePlayerAndGl() {
+        try { player?.removeListener(playerListener) } catch (_: Exception) {}
+        try { player?.stop() } catch (_: Exception) {}
+        try { player?.clearVideoSurface() } catch (_: Exception) {}
+        try { player?.release() } catch (_: Exception) {}
+        player = null
+        releaseGlOnly()
     }
 
     private fun postToPlayerThread(block: () -> Unit) {
