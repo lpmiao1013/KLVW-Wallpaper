@@ -407,6 +407,23 @@ class VideoRenderer(
         Matrix.translateM(mvpMatrix, 0, dest.left, dest.top, 0f)
         Matrix.scaleM(mvpMatrix, 0, dest.width(), dest.height(), 1f)
 
+        // ST first (decoder orientation / crop), then optional 90° around UV center.
+        // Do NOT remap UV corners manually — that fights SurfaceTexture's matrix and
+        // often yields a mirrored frame (video "looks rotated" but text is reversed).
+        val texMatrix = FloatArray(16)
+        if (rotate) {
+            val rot = FloatArray(16)
+            Matrix.setIdentityM(rot, 0)
+            Matrix.translateM(rot, 0, 0.5f, 0.5f, 0f)
+            // rotateM is CCW in UV space; match Bitmap clockwise via opposite sign after ST.
+            val deg = if (rotateMismatchCw) -90f else 90f
+            Matrix.rotateM(rot, 0, deg, 0f, 0f, 1f)
+            Matrix.translateM(rot, 0, -0.5f, -0.5f, 0f)
+            Matrix.multiplyMM(texMatrix, 0, rot, 0, stMatrix, 0)
+        } else {
+            System.arraycopy(stMatrix, 0, texMatrix, 0, 16)
+        }
+
         GLES20.glViewport(0, 0, sw, sh)
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
@@ -415,18 +432,14 @@ class VideoRenderer(
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, tex[0])
         GLES20.glUniform1i(samplerUniform, 0)
         GLES20.glUniformMatrix4fv(mvpUniform, 1, false, mvpMatrix, 0)
-        GLES20.glUniformMatrix4fv(stUniform, 1, false, stMatrix, 0)
+        GLES20.glUniformMatrix4fv(stUniform, 1, false, texMatrix, 0)
 
-        val uv = when {
-            rotate && rotateMismatchCw -> floatArrayOf(0f, 1f, 0f, 0f, 1f, 1f, 1f, 0f)
-            rotate && !rotateMismatchCw -> floatArrayOf(1f, 0f, 1f, 1f, 0f, 0f, 0f, 1f)
-            else -> floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f)
-        }
+        // Unit quad + standard UVs; rotation lives entirely in texMatrix.
         val verts = floatArrayOf(
-            0f, 0f, uv[0], uv[1],
-            1f, 0f, uv[2], uv[3],
-            0f, 1f, uv[4], uv[5],
-            1f, 1f, uv[6], uv[7]
+            0f, 0f, 0f, 0f,
+            1f, 0f, 1f, 0f,
+            0f, 1f, 0f, 1f,
+            1f, 1f, 1f, 1f
         )
         val buf = ByteBuffer.allocateDirect(verts.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         buf.put(verts).position(0)

@@ -1419,7 +1419,7 @@ private fun WallpaperDisplaySection(viewModel: WallpaperViewModel) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("自动旋转适配", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "方向与屏幕不一致时自动旋转。图片会真正旋转 90°；视频受系统限制，按适应/填充缩放处理。",
+                    "方向与屏幕不一致时自动旋转 90°（图片与视频均支持）。可再选顺时针或逆时针。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
