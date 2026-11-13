@@ -850,6 +850,11 @@ private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
         HorizontalDivider()
         Text("解锁时 — 轮换壁纸", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "同一屏幕图片与视频只能开一个，避免互相覆盖。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         listOf(
             Triple("home_image", "桌面图片", homeImage),
@@ -1219,7 +1224,7 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            "分别开关桌面/锁屏的图片与视频定时，并设置间隔。无需再打开弹层 Timer Control。",
+            "分别开关桌面/锁屏定时并设置间隔。同一屏幕图片与视频定时互斥，开一个会关掉另一个。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

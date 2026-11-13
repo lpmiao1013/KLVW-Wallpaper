@@ -54,6 +54,8 @@ class WallpaperTimerManager @Inject constructor(
         // Async: read persisted paused state from DataStore before starting timers so that
         // paused timers (both P.o.L and manual/notification) don't reschedule after process restart.
         scope.launch {
+            // Drop legacy both-on image+video pairs before scheduling alarms.
+            prefs.reconcileImageVideoMutex()
             val pausedKeys = prefs.generalPausedTimers.first()
             if (pausedKeys.isNotEmpty()) {
                 _paused.update { current -> current + pausedKeys.associateWith { true } }
