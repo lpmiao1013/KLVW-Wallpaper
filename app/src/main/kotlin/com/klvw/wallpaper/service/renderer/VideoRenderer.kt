@@ -131,15 +131,15 @@ class VideoRenderer(
                 }, handler)
                 decoderSurface = Surface(st)
 
-                val exo = ExoPlayer.Builder(context).build()
-                exo.setMediaItem(MediaItem.fromUri(uri))
-                exo.repeatMode = Player.REPEAT_MODE_ONE
-                exo.volume = 0f
+        val exo = ExoPlayer.Builder(context).build()
+        exo.setMediaItem(MediaItem.fromUri(uri))
+        exo.repeatMode = Player.REPEAT_MODE_ONE
+        exo.volume = 0f
                 exo.setVideoSurface(decoderSurface)
-                exo.addListener(playerListener)
-                exo.prepare()
-                exo.playWhenReady = true
-                player = exo
+        exo.addListener(playerListener)
+        exo.prepare()
+        exo.playWhenReady = true
+        player = exo
             } catch (_: Throwable) {
                 releaseOnGlThread()
             }
@@ -167,10 +167,10 @@ class VideoRenderer(
         if (handler != null && thread != null && thread.isAlive) {
             val done = Object()
             handler.post {
-                try { player?.removeListener(playerListener) } catch (_: Exception) {}
-                try { player?.stop() } catch (_: Exception) {}
-                try { player?.release() } catch (_: Exception) {}
-                player = null
+        try { player?.removeListener(playerListener) } catch (_: Exception) {}
+        try { player?.stop() } catch (_: Exception) {}
+        try { player?.release() } catch (_: Exception) {}
+        player = null
                 releaseOnGlThread()
                 synchronized(done) { done.notifyAll() }
             }

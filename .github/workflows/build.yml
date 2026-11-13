@@ -4,6 +4,15 @@ on:
   push:
     branches: [ master, main ]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: "debug or release"
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - debug
 
 jobs:
   build:
@@ -25,13 +34,44 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Decode release keystore
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_type == 'release' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_BASE64 secret missing — release will fall back to debug signing."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > app/klvw-release.keystore
+          printf 'storeFile=app/klvw-release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
 
-      - name: Upload APK
-        if: success()
+      - name: Build APK
+        env:
+          BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_type || 'release' }}
+        run: |
+          if [ "$BUILD_TYPE" = "debug" ]; then
+            ./gradlew :app:assembleDebug --stacktrace
+          else
+            ./gradlew :app:assembleRelease --stacktrace
+          fi
+
+      - name: Upload Debug APK
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.build_type == 'debug' }}
         uses: actions/upload-artifact@v4
         with:
           name: klvw-wallpaper-debug
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+      - name: Upload Release APK
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || inputs.build_type == 'release') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: klvw-wallpaper-release
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 30
