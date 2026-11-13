@@ -163,7 +163,9 @@ class KLVWallpaperServiceLock : WallpaperService() {
                     LockCollectQuad(state.first, state.second, scale, rotateEn, rotateCw)
                 }.collect { q ->
                     try {
-                        releaseRenderersSuspending()
+                        // Sync release: video uses SurfaceHolder (not GLES), so it can hand
+                        // the same wallpaper Surface back to image EGL cleanly.
+                        release()
                         val uri = q.uri ?: return@collect
                         isVideo = q.isVideo
                         val mode = WallpaperScaleMode.fromPref(q.scale)
@@ -220,14 +222,6 @@ class KLVWallpaperServiceLock : WallpaperService() {
             colorJob = null
             release()
             scope.cancel()
-        }
-
-        private suspend fun releaseRenderersSuspending() {
-            try { imageRenderer?.release() } catch (_: Throwable) {}
-            imageRenderer = null
-            try { videoRenderer?.releaseSuspending() } catch (_: Throwable) {}
-            videoRenderer = null
-            computedWallpaperColors = null
         }
 
         private fun release() {
