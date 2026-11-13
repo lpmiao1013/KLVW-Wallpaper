@@ -100,6 +100,31 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             )
         }
 
+        SettingsSection(title = "动态壁纸") {
+            SettingAction(
+                icon = Icons.Default.Tune,
+                title = "启用动态壁纸",
+                subtitle = "将 KLVW 设为动态壁纸服务",
+                onClick = {
+                    try {
+                        val intent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
+                        context.startActivity(intent)
+                    } catch (_: Exception) { }
+                }
+            )
+        }
+
+        SettingsSection(title = "KLVW 显示控制") {
+            DisplayControlSection(popupViewModel = popupViewModel)
+        }
+
+        SettingsSection(title = "壁纸定时器") {
+            TimerControlSettingsSection(popupViewModel = popupViewModel)
+            TimerNotificationSection(popupViewModel = popupViewModel)
+            TimerGlobalOffSection(popupViewModel = popupViewModel)
+        }
+
+        // Less-used: status bar / popup menu / tile / watch faces — above watch section
         SettingsSection(title = "状态栏图标") {
             Row(
                 modifier = Modifier
@@ -130,20 +155,6 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             }
         }
 
-        SettingsSection(title = "动态壁纸") {
-            SettingAction(
-                icon = Icons.Default.Tune,
-                title = "启用动态壁纸",
-                subtitle = "将 KLVW 设为动态壁纸服务",
-                onClick = {
-                    try {
-                        val intent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
-                        context.startActivity(intent)
-                    } catch (_: Exception) { }
-                }
-            )
-        }
-
         SettingsSection(title = "KLVW 弹层菜单") {
             KLVWPopupSection(popupViewModel = popupViewModel)
         }
@@ -154,16 +165,6 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
 
         SettingsSection(title = "Pujie 表盘") {
             PujieWatchFaceSection(popupViewModel = popupViewModel)
-        }
-
-        SettingsSection(title = "KLVW 显示控制") {
-            DisplayControlSection(popupViewModel = popupViewModel)
-        }
-
-        SettingsSection(title = "壁纸定时器") {
-            TimerControlSettingsSection(popupViewModel = popupViewModel)
-            TimerNotificationSection(popupViewModel = popupViewModel)
-            TimerGlobalOffSection(popupViewModel = popupViewModel)
         }
 
         SettingsSection(title = "KLVW 手表") {

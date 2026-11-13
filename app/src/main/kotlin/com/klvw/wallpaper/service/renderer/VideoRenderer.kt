@@ -27,7 +27,6 @@ import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.util.DisplayUtils
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
@@ -110,26 +109,6 @@ class VideoRenderer(
             0f, 0f, 1f, 0f,
             1f, 0f, 0f, 1f
         )
-
-        /** In-process resume points for the same video URI across engine reloads. */
-        private val resumePositionByUri = ConcurrentHashMap<String, Long>()
-        private const val MIN_RESUME_MS = 1_000L
-        private const val END_MARGIN_MS = 1_500L
-
-        private fun rememberPosition(uriKey: String, positionMs: Long, durationMs: Long) {
-            if (positionMs < MIN_RESUME_MS) {
-                resumePositionByUri.remove(uriKey)
-                return
-            }
-            if (durationMs > 0 && positionMs >= durationMs - END_MARGIN_MS) {
-                resumePositionByUri.remove(uriKey)
-                return
-            }
-            resumePositionByUri[uriKey] = positionMs
-        }
-
-        private fun resumePositionFor(uriKey: String): Long =
-            resumePositionByUri[uriKey] ?: 0L
     }
 
     private val playerListener = object : Player.Listener {
@@ -174,7 +153,7 @@ class VideoRenderer(
         val probed = probeDisplaySize(uri)
         videoW = probed.first
         videoH = probed.second
-        val startPositionMs = resumePositionFor(uri.toString())
+        val startPositionMs = VideoPlaybackPositions.get(uri.toString())
 
         val thread = HandlerThread("KLVW-VideoGL").also { it.start() }
         glThread = thread
@@ -251,7 +230,7 @@ class VideoRenderer(
         try {
             val pos = p.currentPosition
             val dur = p.duration
-            rememberPosition(uriKey, pos, if (dur == C.TIME_UNSET) 0L else dur)
+            VideoPlaybackPositions.set(uriKey, pos, if (dur == C.TIME_UNSET) 0L else dur)
         } catch (_: Exception) {
         }
     }

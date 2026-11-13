@@ -23,6 +23,7 @@ import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.aer.AerLockStore
+import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
 import com.klvw.wallpaper.tile.ScreenUnlockReceiver
 import com.klvw.wallpaper.tile.TimerStatusNotificationHelper
 import com.klvw.wallpaper.tile.WallpaperTimerManager
@@ -58,6 +59,7 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        VideoPlaybackPositions.init(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel("klvw_debug", "KLVW Debug", NotificationManager.IMPORTANCE_HIGH)

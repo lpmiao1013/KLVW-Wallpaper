@@ -53,6 +53,7 @@ import coil3.compose.AsyncImage
 import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.model.WallpaperTarget
+import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
 import com.klvw.wallpaper.ui.theme.SurfaceGlass
 import com.klvw.wallpaper.ui.viewmodel.MediaTab
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
@@ -440,8 +441,9 @@ private fun MediaPreviewDialog(
     val maxHeight = (config.screenHeightDp * 0.8f).dp
     val maxWidthPx = with(density) { maxWidth.roundToPx() }
     val maxHeightPx = with(density) { maxHeight.roundToPx() }
-    var videoPlaying by remember { mutableStateOf(false) }
+    var videoPlaying by remember { mutableStateOf(item.type == FolderType.VIDEO) }
     var imageAspectRatio by remember(item.uri) { mutableStateOf<Float?>(null) }
+    var startSavedHint by remember { mutableStateOf<String?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -459,7 +461,32 @@ private fun MediaPreviewDialog(
             contentAlignment = Alignment.Center
         ) {
             if (item.type == FolderType.VIDEO && videoPlaying) {
-                VideoPlayer(uri = item.uri, modifier = Modifier.fillMaxSize())
+                Column(modifier = Modifier.fillMaxSize()) {
+                    VideoPlayer(
+                        uri = item.uri,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        onSetStartPoint = { positionMs, durationMs ->
+                            VideoPlaybackPositions.set(
+                                item.uri.toString(),
+                                positionMs,
+                                durationMs
+                            )
+                            val sec = positionMs / 1000
+                            startSavedHint = "已设起点 ${sec / 60}:${("%02d").format(sec % 60)}"
+                        }
+                    )
+                    startSavedHint?.let { hint ->
+                        Text(
+                            hint,
+                            color = Color(0xFFB8F2C8),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.Black.copy(alpha = 0.75f))
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
+                }
             } else {
                 AsyncImage(
                     model = remember(item.uri, item.lastModified) {
@@ -540,11 +567,16 @@ private fun MediaPreviewDialog(
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun VideoPlayer(uri: android.net.Uri, modifier: Modifier = Modifier) {
+private fun VideoPlayer(
+    uri: android.net.Uri,
+    modifier: Modifier = Modifier,
+    onSetStartPoint: (positionMs: Long, durationMs: Long) -> Unit
+) {
     val context = LocalContext.current
+    val startMs = remember(uri) { VideoPlaybackPositions.get(uri.toString()) }
     val player = remember(uri) {
         ExoPlayer.Builder(context).build().also {
-            it.setMediaItem(MediaItem.fromUri(uri))
+            it.setMediaItem(MediaItem.fromUri(uri), startMs.coerceAtLeast(0L))
             it.repeatMode = Player.REPEAT_MODE_ONE
             it.prepare()
             it.playWhenReady = true
@@ -553,14 +585,34 @@ private fun VideoPlayer(uri: android.net.Uri, modifier: Modifier = Modifier) {
     DisposableEffect(player) {
         onDispose { player.release() }
     }
-    AndroidView(
-        factory = { ctx ->
-            PlayerView(ctx).apply {
-                this.player = player
-                useController = true
-            }
-        },
-        modifier = modifier
-    )
+    Box(modifier = modifier) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    this.player = player
+                    useController = true
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        Button(
+            onClick = {
+                val pos = player.currentPosition
+                val dur = player.duration
+                onSetStartPoint(
+                    pos,
+                    if (dur == androidx.media3.common.C.TIME_UNSET) 0L else dur
+                )
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
+            )
+        ) {
+            Text("设为起点（续播节点）")
+        }
+    }
 }
 
