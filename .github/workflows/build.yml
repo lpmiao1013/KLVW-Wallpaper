@@ -43,18 +43,29 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Bump VERSION_CODE for release
+      - name: Bump VERSION_CODE and VERSION_NAME for release
         id: bump
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_type == 'release' }}
         run: |
           set -euo pipefail
           CODE=$(grep -E '^VERSION_CODE=' version.properties | cut -d= -f2 | tr -d '[:space:]')
           NAME=$(grep -E '^VERSION_NAME=' version.properties | cut -d= -f2 | tr -d '[:space:]')
-          NEW=$((CODE + 1))
-          sed -i "s/^VERSION_CODE=.*/VERSION_CODE=${NEW}/" version.properties
-          echo "version_code=${NEW}" >> "$GITHUB_OUTPUT"
-          echo "version_name=${NAME}" >> "$GITHUB_OUTPUT"
-          echo "Bumped VERSION_CODE: ${CODE} -> ${NEW} (NAME=${NAME})"
+          NEW_CODE=$((CODE + 1))
+          # Patch bump: 7.0.1 -> 7.0.2 (expects MAJOR.MINOR.PATCH)
+          MAJOR=$(echo "$NAME" | cut -d. -f1)
+          MINOR=$(echo "$NAME" | cut -d. -f2)
+          PATCH=$(echo "$NAME" | cut -d. -f3)
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ]; then
+            echo "VERSION_NAME must be MAJOR.MINOR.PATCH, got: ${NAME}"
+            exit 1
+          fi
+          NEW_NAME="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          sed -i "s/^VERSION_CODE=.*/VERSION_CODE=${NEW_CODE}/" version.properties
+          sed -i "s/^VERSION_NAME=.*/VERSION_NAME=${NEW_NAME}/" version.properties
+          echo "version_code=${NEW_CODE}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${NEW_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Bumped VERSION_CODE: ${CODE} -> ${NEW_CODE}"
+          echo "Bumped VERSION_NAME: ${NAME} -> ${NEW_NAME}"
           cat version.properties
 
       - name: Decode release keystore
@@ -94,7 +105,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add version.properties
-          git commit -m "chore: bump VERSION_CODE to ${{ steps.bump.outputs.version_code }} [skip ci]"
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version_name }} (${{ steps.bump.outputs.version_code }}) [skip ci]"
           git push
 
       - name: Upload Debug APK
