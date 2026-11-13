@@ -101,6 +101,45 @@ object WallpaperLayout {
     fun effectiveSize(w: Int, h: Int, rotate: Boolean): Pair<Int, Int> =
         if (rotate) h to w else w to h
 
+    /**
+     * Destination rect in screen pixels for [contentW]x[contentH] under [mode].
+     * Content size should already reflect any logical 90° auto-rotate.
+     */
+    fun destinationRect(
+        contentW: Int,
+        contentH: Int,
+        screenW: Int,
+        screenH: Int,
+        mode: WallpaperScaleMode
+    ): RectF {
+        val dw = screenW.toFloat()
+        val dh = screenH.toFloat()
+        if (contentW <= 0 || contentH <= 0 || screenW <= 0 || screenH <= 0) {
+            return RectF(0f, 0f, dw, dh)
+        }
+        val sw = contentW.toFloat()
+        val sh = contentH.toFloat()
+        return when (mode) {
+            WallpaperScaleMode.STRETCH -> RectF(0f, 0f, dw, dh)
+            WallpaperScaleMode.FILL -> {
+                val scale = max(dw / sw, dh / sh)
+                val tw = sw * scale
+                val th = sh * scale
+                val left = (dw - tw) / 2f
+                val top = (dh - th) / 2f
+                RectF(left, top, left + tw, top + th)
+            }
+            WallpaperScaleMode.FIT -> {
+                val scale = min(dw / sw, dh / sh)
+                val tw = sw * scale
+                val th = sh * scale
+                val left = (dw - tw) / 2f
+                val top = (dh - th) / 2f
+                RectF(left, top, left + tw, top + th)
+            }
+        }
+    }
+
     fun nearlySquare(w: Int, h: Int, epsilon: Float = 0.08f): Boolean {
         if (w <= 0 || h <= 0) return true
         return abs(w.toFloat() / h - 1f) < epsilon
