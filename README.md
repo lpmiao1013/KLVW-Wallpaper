@@ -328,13 +328,26 @@ KLVW registers a broadcast receiver for the action `com.klvw.wallpaper.SET_WALLP
 
 模板见根目录 `keystore.properties.example`。
 
+### 版本号
+
+根目录 `version.properties`：
+
+```properties
+VERSION_CODE=8
+VERSION_NAME=7.0.1
+```
+
+- **VERSION_CODE**：每次 CI **正式包（release）** 构建前自动 +1，并回写提交（提交信息带 `[skip ci]`，避免死循环）
+- **VERSION_NAME**：需手动改（如 `7.0.2`）；CI 不会自动改名字
+- debug 手动构建 **不会** 加版本号
+
 ### 推荐：GitHub Actions 打正式包
 
 当前 workflow：`.github/workflows/build.yml`
 
-- push 到 `main` / `master` → 默认打 **release**
+- push 到 `main` / `master` → 默认打 **release**（并自动 VERSION_CODE +1）
 - Actions 页可手动选 `release` 或 `debug`
-- 产物在 run 页面的 **Artifacts**（`klvw-wallpaper-release` / `klvw-wallpaper-debug`）
+- 产物在 run 页面的 **Artifacts**（`klvw-wallpaper-release-…` / `klvw-wallpaper-debug`）
 
 #### 1. 配置 4 个 Repository Secrets（名称必须完全一致）
 

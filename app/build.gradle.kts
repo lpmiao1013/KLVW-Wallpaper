@@ -14,6 +14,15 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
+val versionPropertiesFile = rootProject.file("version.properties")
+val versionProperties = Properties()
+check(versionPropertiesFile.exists()) {
+    "Missing version.properties at repo root"
+}
+versionPropertiesFile.inputStream().use { versionProperties.load(it) }
+val appVersionCode = versionProperties.getProperty("VERSION_CODE").toInt()
+val appVersionName = versionProperties.getProperty("VERSION_NAME")
+
 android {
     namespace = "com.klvw.wallpaper"
     compileSdk = 36
@@ -23,8 +32,8 @@ android {
         applicationId = "com.klvw.wallpaper"
         minSdk = 33
         targetSdk = 36
-        versionCode = 8
-        versionName = "7.0.1"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
