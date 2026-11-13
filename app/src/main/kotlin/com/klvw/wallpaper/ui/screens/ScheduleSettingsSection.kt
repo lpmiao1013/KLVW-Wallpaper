@@ -20,19 +20,16 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -322,7 +319,6 @@ private fun RuleRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RuleEditorDialog(
     rule: ScheduleRule,
@@ -408,7 +404,7 @@ private fun RuleEditorDialog(
     picking?.let { target ->
         val initial = if (target == TimePickTarget.START) draft.startMinute else draft.endMinute
         val title = if (target == TimePickTarget.START) "选择开始时间" else "选择结束时间"
-        WheelTimePickerSheet(
+        WheelTimePickerDialog(
             title = title,
             initialMinute = initial,
             onDismiss = { picking = null },
@@ -449,43 +445,24 @@ private fun TimeFieldRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WheelTimePickerSheet(
+private fun WheelTimePickerDialog(
     title: String,
     initialMinute: Int,
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var hour by remember { mutableIntStateOf((initialMinute / 60).coerceIn(0, 23)) }
     var minute by remember { mutableIntStateOf((initialMinute % 60).coerceIn(0, 59)) }
 
-    ModalBottomSheet(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 28.dp)
-        ) {
+        title = { Text(title) },
+        text = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = onDismiss) { Text("取消") }
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = { onConfirm(hour * 60 + minute) }) { Text("确定") }
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .padding(horizontal = 24.dp),
+                    .height(220.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 NumberWheel(
@@ -497,7 +474,7 @@ private fun WheelTimePickerSheet(
                 Text(
                     ":",
                     style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
                 NumberWheel(
                     values = (0..59).toList(),
@@ -506,8 +483,14 @@ private fun WheelTimePickerSheet(
                     modifier = Modifier.weight(1f)
                 )
             }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(hour * 60 + minute) }) { Text("确定") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
         }
-    }
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
