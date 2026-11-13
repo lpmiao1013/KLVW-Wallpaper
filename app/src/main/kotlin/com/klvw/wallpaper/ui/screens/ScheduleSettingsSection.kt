@@ -72,7 +72,7 @@ fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
                 tint = MaterialTheme.colorScheme.primary
             )
             Spacer(Modifier.width(12.dp))
-            Column(Modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("启用时段方案", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "按 24 小时铺满桌面+锁屏；与全局开关无关",
@@ -118,7 +118,7 @@ fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
                         }
                     }
                 )
-                Column(Modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(group.name, style = MaterialTheme.typography.bodyLarge)
                     Text(
                         "${group.rules.size} 条规则",
