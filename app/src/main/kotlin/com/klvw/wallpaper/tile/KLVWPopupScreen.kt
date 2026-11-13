@@ -1235,7 +1235,7 @@ private fun DisplayControlOverlay(
                     }
                 }
                 Text(
-                    "每次解锁时轮换壁纸",
+                    "每次解锁时轮换壁纸。同一屏幕图片与视频只能开一个。",
                     style = MaterialTheme.typography.bodySmall,
                     color = secondaryTextColor
                 )

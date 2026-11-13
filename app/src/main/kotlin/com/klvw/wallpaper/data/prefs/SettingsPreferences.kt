@@ -447,13 +447,59 @@ class SettingsPreferences @Inject constructor(
         context.dataStore.edit { it[Keys.DISPLAY_CONTROL_RESET_LOCK_TIMER] = enabled }
     }
 
+    /**
+     * Unlock Display Control: home image/video and lock image/video are mutually
+     * exclusive within each screen — enabling one clears the sibling so both
+     * cannot fight over the same home/lock wallpaper slot.
+     */
     suspend fun setDisplayControl(key: String, enabled: Boolean) {
         context.dataStore.edit {
             when (key) {
-                "home_image" -> it[Keys.DISPLAY_CONTROL_HOME_IMAGE] = enabled
-                "home_video" -> it[Keys.DISPLAY_CONTROL_HOME_VIDEO] = enabled
-                "lock_image" -> it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] = enabled
-                "lock_video" -> it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] = enabled
+                "home_image" -> {
+                    it[Keys.DISPLAY_CONTROL_HOME_IMAGE] = enabled
+                    if (enabled) it[Keys.DISPLAY_CONTROL_HOME_VIDEO] = false
+                }
+                "home_video" -> {
+                    it[Keys.DISPLAY_CONTROL_HOME_VIDEO] = enabled
+                    if (enabled) it[Keys.DISPLAY_CONTROL_HOME_IMAGE] = false
+                }
+                "lock_image" -> {
+                    it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] = enabled
+                    if (enabled) it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] = false
+                }
+                "lock_video" -> {
+                    it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] = enabled
+                    if (enabled) it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] = false
+                }
+            }
+        }
+    }
+
+    /**
+     * Clear legacy "both image and video on" for unlock + timers (prefer image).
+     * Safe to call on every process start.
+     */
+    suspend fun reconcileImageVideoMutex() {
+        context.dataStore.edit {
+            if ((it[Keys.DISPLAY_CONTROL_HOME_IMAGE] == true) &&
+                (it[Keys.DISPLAY_CONTROL_HOME_VIDEO] == true)
+            ) {
+                it[Keys.DISPLAY_CONTROL_HOME_VIDEO] = false
+            }
+            if ((it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] == true) &&
+                (it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] == true)
+            ) {
+                it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] = false
+            }
+            if ((it[Keys.HOME_IMAGE_TIMER_ENABLED] == true) &&
+                (it[Keys.HOME_VIDEO_TIMER_ENABLED] == true)
+            ) {
+                it[Keys.HOME_VIDEO_TIMER_ENABLED] = false
+            }
+            if ((it[Keys.LOCK_IMAGE_TIMER_ENABLED] == true) &&
+                (it[Keys.LOCK_VIDEO_TIMER_ENABLED] == true)
+            ) {
+                it[Keys.LOCK_VIDEO_TIMER_ENABLED] = false
             }
         }
     }
@@ -522,13 +568,29 @@ class SettingsPreferences @Inject constructor(
         context.dataStore.edit { it[Keys.WATCH_GLOBAL_OFF_VIBRATE] = enabled }
     }
 
+    /**
+     * Timers: same per-screen image/video mutex as Display Control.
+     * Enabling home/lock image timer turns off that screen's video timer, and vice versa.
+     */
     suspend fun setTimerEnabled(key: String, enabled: Boolean) {
         context.dataStore.edit {
             when (key) {
-                "home_image" -> it[Keys.HOME_IMAGE_TIMER_ENABLED] = enabled
-                "home_video" -> it[Keys.HOME_VIDEO_TIMER_ENABLED] = enabled
-                "lock_image" -> it[Keys.LOCK_IMAGE_TIMER_ENABLED] = enabled
-                "lock_video" -> it[Keys.LOCK_VIDEO_TIMER_ENABLED] = enabled
+                "home_image" -> {
+                    it[Keys.HOME_IMAGE_TIMER_ENABLED] = enabled
+                    if (enabled) it[Keys.HOME_VIDEO_TIMER_ENABLED] = false
+                }
+                "home_video" -> {
+                    it[Keys.HOME_VIDEO_TIMER_ENABLED] = enabled
+                    if (enabled) it[Keys.HOME_IMAGE_TIMER_ENABLED] = false
+                }
+                "lock_image" -> {
+                    it[Keys.LOCK_IMAGE_TIMER_ENABLED] = enabled
+                    if (enabled) it[Keys.LOCK_VIDEO_TIMER_ENABLED] = false
+                }
+                "lock_video" -> {
+                    it[Keys.LOCK_VIDEO_TIMER_ENABLED] = enabled
+                    if (enabled) it[Keys.LOCK_IMAGE_TIMER_ENABLED] = false
+                }
             }
         }
     }
