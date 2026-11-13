@@ -15,6 +15,7 @@ import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,7 @@ class TaskerActionFire : BroadcastReceiver() {
     @Inject lateinit var staticImageRepository: StaticImageRepository
     @Inject lateinit var prefs: SettingsPreferences
     @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
+    @Inject lateinit var scheduleManager: ScheduleManager
 
     private var ctx: Context? = null
     private var notifId = 1000
@@ -163,24 +165,24 @@ class TaskerActionFire : BroadcastReceiver() {
 
         val folderUri = bundle.getString(TaskerBundle.BUNDLE_KEY_FOLDER_URI)?.trim() ?: ""
         val targetStr = bundle.getString(TaskerBundle.BUNDLE_KEY_TARGET) ?: TaskerBundle.TARGET_HOME
+        val target = when (targetStr) {
+            TaskerBundle.TARGET_LOCK -> WallpaperTarget.LOCK
+            else -> WallpaperTarget.HOME
+        }
         return when {
             folderUri == TaskerBundle.FOLDER_URI_DEFAULT -> {
-                val defaultUri = when {
-                    type == FolderType.IMAGE && targetStr == TaskerBundle.TARGET_LOCK ->
-                        prefs.defaultLockImageFolderUri.first()
-                    type == FolderType.IMAGE ->
-                        prefs.defaultHomeImageFolderUri.first()
-                    type == FolderType.VIDEO && targetStr == TaskerBundle.TARGET_LOCK ->
-                        prefs.defaultLockVideoFolderUri.first()
-                    else ->
-                        prefs.defaultHomeVideoFolderUri.first()
-                }
+                val defaultUri = scheduleManager.resolveFolderUri(target, type)
                 if (defaultUri != null) {
                     shuffleHistoryManager.pickNext(
                         folderRepository.getItemsFromFolder(defaultUri, type), defaultUri, type
                     )
                 } else {
-                    debugNotify("No global default folder configured for ${type.name} / $targetStr — set one in KLVW → Folder Selector")
+                    debugNotify(
+                        if (scheduleManager.isEnabled())
+                            "时段方案已启用，当前时段不是 ${type.name} / $targetStr"
+                        else
+                            "No global default folder configured for ${type.name} / $targetStr — set one in KLVW → Folder Selector"
+                    )
                     null
                 }
             }

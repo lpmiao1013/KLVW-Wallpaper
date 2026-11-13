@@ -124,6 +124,10 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             TimerGlobalOffSection(popupViewModel = popupViewModel)
         }
 
+        SettingsSection(title = "时段方案") {
+            ScheduleSettingsSection(viewModel = viewModel)
+        }
+
         // Less-used: status bar / popup menu / tile / watch faces — above watch section
         SettingsSection(title = "状态栏图标") {
             Row(

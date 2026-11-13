@@ -15,6 +15,7 @@ import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,7 +35,8 @@ class KLVWPopupViewModel @Inject constructor(
     private val wallpaperRepository: WallpaperRepository,
     private val staticImageRepository: StaticImageRepository,
     private val timerManager: WallpaperTimerManager,
-    private val shuffleHistoryManager: ShuffleHistoryManager
+    private val shuffleHistoryManager: ShuffleHistoryManager,
+    private val scheduleManager: ScheduleManager
 ) : ViewModel() {
 
     val popupItems: StateFlow<List<PopupItem>> = prefs.popupItemsJson
@@ -253,31 +255,41 @@ class KLVWPopupViewModel @Inject constructor(
             else   -> WallpaperTarget.HOME
         }
         when (item.actionType) {
-            POPUP_ACTION_RANDOM_IMAGE -> {
-                val folderUri = item.folderUri.ifBlank {
-                    when (item.target) {
-                        "lock" -> prefs.defaultLockImageFolderUri.first()
-                        else   -> prefs.defaultHomeImageFolderUri.first()
+            POPUP_ACTION_RANDOM_IMAGE, POPUP_ACTION_RANDOM_VIDEO -> {
+                val screens = when (target) {
+                    WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
+                    WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
+                    else -> listOf(WallpaperTarget.HOME)
+                }
+                val wantVideo = item.actionType == POPUP_ACTION_RANDOM_VIDEO
+                for (screen in screens) {
+                    if (scheduleManager.isEnabled()) {
+                        val rule = scheduleManager.currentRule(screen) ?: continue
+                        val wallpaperItem = shuffleHistoryManager.pickNext(
+                            folderRepository.getItemsFromFolder(rule.folderUri, rule.media),
+                            rule.folderUri, rule.media
+                        ) ?: continue
+                        wallpaperRepository.setWallpaper(wallpaperItem, screen)
+                    } else {
+                        val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
+                        val folderUri = item.folderUri.ifBlank {
+                            when {
+                                screen == WallpaperTarget.LOCK && type == FolderType.IMAGE ->
+                                    prefs.defaultLockImageFolderUri.first()
+                                screen == WallpaperTarget.LOCK -> prefs.defaultLockVideoFolderUri.first()
+                                type == FolderType.IMAGE -> prefs.defaultHomeImageFolderUri.first()
+                                else -> prefs.defaultHomeVideoFolderUri.first()
+                            }
+                        } ?: continue
+                        val wallpaperItem = shuffleHistoryManager.pickNext(
+                            folderRepository.getItemsFromFolder(folderUri, type), folderUri, type
+                        ) ?: continue
+                        wallpaperRepository.setWallpaper(wallpaperItem, screen)
                     }
-                } ?: return
-                val wallpaperItem = shuffleHistoryManager.pickNext(
-                    folderRepository.getItemsFromFolder(folderUri, FolderType.IMAGE), folderUri, FolderType.IMAGE
-                ) ?: return
-                wallpaperRepository.setWallpaper(wallpaperItem, target)
-            }
-            POPUP_ACTION_RANDOM_VIDEO -> {
-                val folderUri = item.folderUri.ifBlank {
-                    when (item.target) {
-                        "lock" -> prefs.defaultLockVideoFolderUri.first()
-                        else   -> prefs.defaultHomeVideoFolderUri.first()
-                    }
-                } ?: return
-                val wallpaperItem = shuffleHistoryManager.pickNext(
-                    folderRepository.getItemsFromFolder(folderUri, FolderType.VIDEO), folderUri, FolderType.VIDEO
-                ) ?: return
-                wallpaperRepository.setWallpaper(wallpaperItem, target)
+                }
             }
             POPUP_ACTION_STATIC_IMAGE -> {
+                if (scheduleManager.isEnabled()) return
                 if (item.imageUri.isBlank()) return
                 wallpaperRepository.setWallpaper(
                     WallpaperItem(Uri.parse(item.imageUri), FolderType.IMAGE, "", ""),
@@ -324,19 +336,40 @@ class KLVWPopupViewModel @Inject constructor(
         }
     }
 
-    suspend fun onFolderSelected(mediaType: String, target: String, folderUri: String) {
+    /** @return false when schedule is enabled (defaults are frozen). */
+    suspend fun onFolderSelected(mediaType: String, target: String, folderUri: String): Boolean {
+        if (scheduleManager.isEnabled()) return false
         prefs.setDefaultFolderUri(target, mediaType, folderUri)
+        return true
     }
 
     suspend fun getItemsFromFolder(uri: String, type: FolderType): List<WallpaperItem> =
         folderRepository.getItemsFromFolder(uri, type)
 
-    suspend fun setFileWallpaper(item: WallpaperItem, targetStr: String) {
+    suspend fun setFileWallpaper(item: WallpaperItem, targetStr: String): Boolean {
         val target = when (targetStr) {
             "lock" -> WallpaperTarget.LOCK
             "both" -> WallpaperTarget.BOTH
             else   -> WallpaperTarget.HOME
         }
+        if (scheduleManager.isEnabled()) {
+            val screens = when (target) {
+                WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
+                WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
+                else -> listOf(WallpaperTarget.HOME)
+            }
+            for (screen in screens) {
+                val rule = scheduleManager.currentRule(screen) ?: return false
+                if (item.type != rule.media) return false
+                if (item.folderUri != rule.folderUri) return false
+                wallpaperRepository.setWallpaper(item, screen)
+            }
+            return true
+        }
         wallpaperRepository.setWallpaper(item, target)
+        return true
     }
+
+    val scheduleEnabled: StateFlow<Boolean> = prefs.scheduleEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 }

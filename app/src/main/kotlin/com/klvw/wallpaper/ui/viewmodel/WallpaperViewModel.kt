@@ -13,6 +13,7 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,7 @@ data class WallpaperUiState(
     val defaultLockImageFolderUri: String? = null,
     val defaultHomeVideoFolderUri: String? = null,
     val defaultLockVideoFolderUri: String? = null,
+    val scheduleEnabled: Boolean = false,
 )
 
 @HiltViewModel
@@ -62,7 +64,8 @@ class WallpaperViewModel @Inject constructor(
     private val folderRepository: FolderRepository,
     private val wallpaperRepository: WallpaperRepository,
     private val staticImageRepository: StaticImageRepository,
-    private val prefs: SettingsPreferences
+    private val prefs: SettingsPreferences,
+    private val scheduleManager: ScheduleManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WallpaperUiState())
@@ -177,10 +180,48 @@ class WallpaperViewModel @Inject constructor(
                 )}
             }
         }
+
+        viewModelScope.launch {
+            prefs.scheduleEnabled.collect { enabled ->
+                _state.update { it.copy(scheduleEnabled = enabled) }
+                if (enabled) syncFolderToSchedule()
+            }
+        }
+    }
+
+    /** Lock picker to the active schedule folder for the current target. */
+    private suspend fun syncFolderToSchedule() {
+        if (!scheduleManager.isEnabled()) return
+        val screen = when (_state.value.target) {
+            WallpaperTarget.LOCK -> WallpaperTarget.LOCK
+            else -> WallpaperTarget.HOME
+        }
+        val rule = scheduleManager.currentRule(screen) ?: return
+        val tab = if (rule.media == FolderType.VIDEO) MediaTab.VIDEO else MediaTab.IMAGE
+        if (tab == MediaTab.IMAGE) savedImageFolderUri = rule.folderUri
+        else savedVideoFolderUri = rule.folderUri
+        _state.update {
+            it.copy(
+                mediaTab = tab,
+                selectedFolderUri = rule.folderUri,
+                selectedItem = null,
+                previewItems = emptyList(),
+                isLoadingPreview = true
+            )
+        }
+        loadPreviewItems(clearFirst = false)
     }
 
     fun setMediaTab(tab: MediaTab) {
         if (_state.value.isLoadingPreview && _state.value.mediaTab == tab) return
+        if (_state.value.scheduleEnabled && tab == MediaTab.STATIC) {
+            _state.update { it.copy(errorMessage = "时段方案已启用，请使用当前时段文件夹") }
+            return
+        }
+        if (_state.value.scheduleEnabled) {
+            viewModelScope.launch { syncFolderToSchedule() }
+            return
+        }
         val folderUri = when (tab) {
             MediaTab.IMAGE -> savedImageFolderUri
             MediaTab.VIDEO -> savedVideoFolderUri
@@ -202,6 +243,9 @@ class WallpaperViewModel @Inject constructor(
 
     fun setTarget(target: WallpaperTarget) {
         _state.update { it.copy(target = target) }
+        if (_state.value.scheduleEnabled) {
+            viewModelScope.launch { syncFolderToSchedule() }
+        }
     }
 
     fun selectItem(item: WallpaperItem) {
@@ -211,6 +255,10 @@ class WallpaperViewModel @Inject constructor(
 
     fun selectFolder(folderUri: String?) {
         if (_state.value.isLoadingPreview) return
+        if (_state.value.scheduleEnabled) {
+            _state.update { it.copy(errorMessage = "时段方案已启用，只能使用当前时段文件夹") }
+            return
+        }
         val tab = _state.value.mediaTab
         if (tab == MediaTab.IMAGE) savedImageFolderUri = folderUri
         else if (tab == MediaTab.VIDEO) savedVideoFolderUri = folderUri
@@ -235,6 +283,22 @@ class WallpaperViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val target = _state.value.target
+                if (scheduleManager.isEnabled()) {
+                    val screens = when (target) {
+                        WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
+                        WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
+                        else -> listOf(WallpaperTarget.HOME)
+                    }
+                    for (screen in screens) {
+                        val rule = scheduleManager.currentRule(screen)
+                        if (rule == null || item.type != rule.media || item.folderUri != rule.folderUri) {
+                            _state.update {
+                                it.copy(isLoading = false, errorMessage = "时段方案已启用，请从当前时段文件夹选择")
+                            }
+                            return@launch
+                        }
+                    }
+                }
                 wallpaperRepository.setWallpaper(item, target)
 
                 val homeNeeded = (target == WallpaperTarget.HOME || target == WallpaperTarget.BOTH)
@@ -300,6 +364,36 @@ class WallpaperViewModel @Inject constructor(
 
     fun clearMessage() {
         _state.update { it.copy(successMessage = null, errorMessage = null) }
+    }
+
+    // ── Daily schedule ──────────────────────────────────────────────
+
+    val scheduleGroupsJson: StateFlow<String> = prefs.scheduleGroupsJson
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "[]")
+    val scheduleActiveGroupId: StateFlow<String?> = prefs.scheduleActiveGroupId
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val scheduleEnabledFlow: StateFlow<Boolean> = prefs.scheduleEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setScheduleEnabled(enabled: Boolean, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            onResult(scheduleManager.setEnabled(enabled))
+        }
+    }
+
+    fun setScheduleActiveGroup(id: String?, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            onResult(scheduleManager.setActiveGroupId(id))
+        }
+    }
+
+    fun saveScheduleGroups(
+        groups: List<com.klvw.wallpaper.data.model.ScheduleGroup>,
+        onResult: (String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            onResult(scheduleManager.saveGroups(groups))
+        }
     }
 
     fun setUseVulkan(enabled: Boolean) {

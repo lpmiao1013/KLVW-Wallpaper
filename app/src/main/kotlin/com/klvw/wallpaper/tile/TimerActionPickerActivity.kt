@@ -13,6 +13,7 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import com.klvw.wallpaper.ui.theme.KLVWTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -26,6 +27,7 @@ class TimerActionPickerActivity : ComponentActivity() {
     @Inject lateinit var folderRepository: FolderRepository
     @Inject lateinit var wallpaperRepository: WallpaperRepository
     @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
+    @Inject lateinit var scheduleManager: ScheduleManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +53,8 @@ class TimerActionPickerActivity : ComponentActivity() {
                         lifecycleScope.launch {
                             if (action == TimerStatusNotificationHelper.VALUE_CHANGE_NOW) {
                                 TimerActionReceiver.applyChangeNow(
-                                    key, prefs, folderRepository, wallpaperRepository, shuffleHistoryManager
+                                    key, prefs, folderRepository, wallpaperRepository,
+                                    shuffleHistoryManager, scheduleManager
                                 )
                             } else {
                                 TimerActionReceiver.applyAction(action, key, timerManager, prefs)

@@ -24,6 +24,7 @@ import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.aer.AerLockStore
 import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
+import com.klvw.wallpaper.schedule.ScheduleManager
 import com.klvw.wallpaper.tile.ScreenUnlockReceiver
 import com.klvw.wallpaper.tile.TimerStatusNotificationHelper
 import com.klvw.wallpaper.tile.WallpaperTimerManager
@@ -54,6 +55,8 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var wallpaperRepository: WallpaperRepository
     @Inject lateinit var folderRepository: FolderRepository
     @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
+    /** Eagerly create so schedule alarms re-arm after process start. */
+    @Inject lateinit var scheduleManager: ScheduleManager
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -231,31 +234,38 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
             }
 
             when (actionType) {
-                "random_image" -> {
-                    val uri = folderUri.ifBlank {
-                        when (target) {
-                            "lock" -> prefs.defaultLockImageFolderUri.first()
-                            else   -> prefs.defaultHomeImageFolderUri.first()
+                "random_image", "random_video" -> {
+                    val wantVideo = actionType == "random_video"
+                    val screens = when (wallpaperTarget) {
+                        WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
+                        WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
+                        else -> listOf(WallpaperTarget.HOME)
+                    }
+                    for (screen in screens) {
+                        if (scheduleManager.isEnabled()) {
+                            val rule = scheduleManager.currentRule(screen) ?: continue
+                            val item = shuffleHistoryManager.pickNext(
+                                folderRepository.getItemsFromFolder(rule.folderUri, rule.media),
+                                rule.folderUri, rule.media
+                            ) ?: continue
+                            wallpaperRepository.setWallpaper(item, screen)
+                        } else {
+                            val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
+                            val uri = folderUri.ifBlank {
+                                when {
+                                    screen == WallpaperTarget.LOCK && type == FolderType.IMAGE ->
+                                        prefs.defaultLockImageFolderUri.first()
+                                    screen == WallpaperTarget.LOCK -> prefs.defaultLockVideoFolderUri.first()
+                                    type == FolderType.IMAGE -> prefs.defaultHomeImageFolderUri.first()
+                                    else -> prefs.defaultHomeVideoFolderUri.first()
+                                }
+                            } ?: continue
+                            val item = shuffleHistoryManager.pickNext(
+                                folderRepository.getItemsFromFolder(uri, type), uri, type
+                            ) ?: continue
+                            wallpaperRepository.setWallpaper(item, screen)
                         }
-                    } ?: return
-                    val item = shuffleHistoryManager.pickNext(
-                        folderRepository.getItemsFromFolder(uri, FolderType.IMAGE),
-                        uri, FolderType.IMAGE
-                    ) ?: return
-                    wallpaperRepository.setWallpaper(item, wallpaperTarget)
-                }
-                "random_video" -> {
-                    val uri = folderUri.ifBlank {
-                        when (target) {
-                            "lock" -> prefs.defaultLockVideoFolderUri.first()
-                            else   -> prefs.defaultHomeVideoFolderUri.first()
-                        }
-                    } ?: return
-                    val item = shuffleHistoryManager.pickNext(
-                        folderRepository.getItemsFromFolder(uri, FolderType.VIDEO),
-                        uri, FolderType.VIDEO
-                    ) ?: return
-                    wallpaperRepository.setWallpaper(item, wallpaperTarget)
+                    }
                 }
                 "restore" -> {
                     prefs.setAppEnabled(true)

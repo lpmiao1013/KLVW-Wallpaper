@@ -22,6 +22,7 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import com.klvw.wallpaper.service.renderer.EGLImageRenderer
 import com.klvw.wallpaper.service.renderer.VideoRenderer
 import com.klvw.wallpaper.util.DisplayUtils
@@ -53,6 +54,7 @@ class KLVWallpaperService : WallpaperService() {
     @Inject lateinit var folderRepository: FolderRepository
     @Inject lateinit var wallpaperRepository: WallpaperRepository
     @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
+    @Inject lateinit var scheduleManager: ScheduleManager
 
     override fun onCreateEngine(): Engine = KLVWallpaperEngine()
 
@@ -277,11 +279,8 @@ class KLVWallpaperService : WallpaperService() {
                 try {
                     if (!prefs.appEnabled.first() || !prefs.doubleTapEnabled.first()) return@launch
                     val type = if (useVideo) FolderType.VIDEO else FolderType.IMAGE
-                    val folderUri = if (useVideo) {
-                        prefs.defaultHomeVideoFolderUri.first()
-                    } else {
-                        prefs.defaultHomeImageFolderUri.first()
-                    } ?: return@launch
+                    val folderUri = scheduleManager.resolveFolderUri(WallpaperTarget.HOME, type)
+                        ?: return@launch
                     val items = folderRepository.getItemsFromFolder(folderUri, type)
                     val item = shuffleHistoryManager.pickNext(items, folderUri, type) ?: return@launch
                     wallpaperRepository.setWallpaper(item, WallpaperTarget.HOME)

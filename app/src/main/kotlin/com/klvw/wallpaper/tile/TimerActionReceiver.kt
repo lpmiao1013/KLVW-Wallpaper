@@ -9,6 +9,7 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -28,6 +29,7 @@ class TimerActionReceiver : BroadcastReceiver() {
         fun folderRepository(): FolderRepository
         fun wallpaperRepository(): WallpaperRepository
         fun shuffleHistoryManager(): ShuffleHistoryManager
+        fun scheduleManager(): ScheduleManager
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -53,7 +55,8 @@ class TimerActionReceiver : BroadcastReceiver() {
                         ) ?: return@launch
                         applyChangeNow(
                             key, ep.prefs(),
-                            ep.folderRepository(), ep.wallpaperRepository(), ep.shuffleHistoryManager()
+                            ep.folderRepository(), ep.wallpaperRepository(),
+                            ep.shuffleHistoryManager(), ep.scheduleManager()
                         )
                     }
                     else -> {
@@ -122,10 +125,11 @@ class TimerActionReceiver : BroadcastReceiver() {
             prefs: SettingsPreferences,
             folderRepository: FolderRepository,
             wallpaperRepository: WallpaperRepository,
-            shuffleHistoryManager: ShuffleHistoryManager
+            shuffleHistoryManager: ShuffleHistoryManager,
+            scheduleManager: ScheduleManager
         ) {
             val (type, target) = keyToTypeTarget(key)
-            val folderUri = defaultFolderUriForKey(prefs, key) ?: return
+            val folderUri = scheduleManager.resolveFolderUri(target, type) ?: return
             val items = folderRepository.getItemsFromFolder(folderUri, type)
             val item = shuffleHistoryManager.pickNext(items, folderUri, type) ?: return
             wallpaperRepository.setWallpaper(item, target)
@@ -138,15 +142,6 @@ class TimerActionReceiver : BroadcastReceiver() {
             "lock_video" -> FolderType.VIDEO to WallpaperTarget.LOCK
             else -> throw IllegalArgumentException("Unknown timer key: $key")
         }
-
-        suspend fun defaultFolderUriForKey(prefs: SettingsPreferences, key: String): String? =
-            when (key) {
-                "home_image" -> prefs.defaultHomeImageFolderUri.first()
-                "home_video" -> prefs.defaultHomeVideoFolderUri.first()
-                "lock_image" -> prefs.defaultLockImageFolderUri.first()
-                "lock_video" -> prefs.defaultLockVideoFolderUri.first()
-                else -> null
-            }
 
         private suspend fun intervalForKey(prefs: SettingsPreferences, key: String) = when (key) {
             "home_image" -> prefs.homeImageTimerIntervalMin.first()

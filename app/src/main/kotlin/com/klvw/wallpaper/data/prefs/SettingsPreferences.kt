@@ -117,6 +117,10 @@ class SettingsPreferences @Inject constructor(
         val GENERAL_PAUSED_TIMERS = stringPreferencesKey("general_paused_timers")
         val POPUP_TIMER_HIGHLIGHT_COLOR = stringPreferencesKey("popup_timer_highlight_color")
         val POPUP_TIMER_BORDER_COLOR = stringPreferencesKey("popup_timer_border_color")
+        // Daily time-window schedule (folder groups)
+        val SCHEDULE_ENABLED = booleanPreferencesKey("schedule_enabled")
+        val SCHEDULE_ACTIVE_GROUP_ID = stringPreferencesKey("schedule_active_group_id")
+        val SCHEDULE_GROUPS_JSON = stringPreferencesKey("schedule_groups_json")
     }
 
     // Raw flows — distinctUntilChanged so writes to unrelated keys don't trigger re-emission
@@ -163,6 +167,9 @@ class SettingsPreferences @Inject constructor(
     val popupSecondaryTextColor: Flow<String?> = context.dataStore.data.map { it[Keys.POPUP_SECONDARY_TEXT_COLOR] }.distinctUntilChanged()
     val popupTimerHighlightColor: Flow<String?> = context.dataStore.data.map { it[Keys.POPUP_TIMER_HIGHLIGHT_COLOR] }.distinctUntilChanged()
     val popupTimerBorderColor: Flow<String?> = context.dataStore.data.map { it[Keys.POPUP_TIMER_BORDER_COLOR] }.distinctUntilChanged()
+    val scheduleEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.SCHEDULE_ENABLED] ?: false }.distinctUntilChanged()
+    val scheduleActiveGroupId: Flow<String?> = context.dataStore.data.map { it[Keys.SCHEDULE_ACTIVE_GROUP_ID] }.distinctUntilChanged()
+    val scheduleGroupsJson: Flow<String> = context.dataStore.data.map { it[Keys.SCHEDULE_GROUPS_JSON] ?: "[]" }.distinctUntilChanged()
     val popupLayout: Flow<String> = context.dataStore.data.map { it[Keys.POPUP_LAYOUT] ?: "list" }.distinctUntilChanged()
     val popupGridColumns: Flow<Int> = context.dataStore.data.map { it[Keys.POPUP_GRID_COLUMNS] ?: 3 }.distinctUntilChanged()
     val popupWidthFraction: Flow<Float> = context.dataStore.data.map { it[Keys.POPUP_WIDTH_FRACTION] ?: 0.92f }.distinctUntilChanged()
@@ -661,7 +668,9 @@ class SettingsPreferences @Inject constructor(
     }
 
     suspend fun setDefaultFolderUri(target: String, mediaType: String, uri: String?) {
+        // While the daily schedule is on, default folder URIs stay frozen.
         context.dataStore.edit { prefs ->
+            if (prefs[Keys.SCHEDULE_ENABLED] == true) return@edit
             fun set(key: androidx.datastore.preferences.core.Preferences.Key<String>) {
                 if (uri != null) prefs[key] = uri else prefs.remove(key)
             }
@@ -678,5 +687,20 @@ class SettingsPreferences @Inject constructor(
                 }
             }
         }
+    }
+
+    suspend fun setScheduleEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.SCHEDULE_ENABLED] = enabled }
+    }
+
+    suspend fun setScheduleActiveGroupId(id: String?) {
+        context.dataStore.edit {
+            if (id.isNullOrBlank()) it.remove(Keys.SCHEDULE_ACTIVE_GROUP_ID)
+            else it[Keys.SCHEDULE_ACTIVE_GROUP_ID] = id
+        }
+    }
+
+    suspend fun setScheduleGroupsJson(json: String) {
+        context.dataStore.edit { it[Keys.SCHEDULE_GROUPS_JSON] = json }
     }
 }

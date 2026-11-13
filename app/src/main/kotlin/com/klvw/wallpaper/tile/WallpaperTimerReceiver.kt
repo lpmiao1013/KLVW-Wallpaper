@@ -28,6 +28,7 @@ class WallpaperTimerReceiver : BroadcastReceiver() {
         fun folderRepository(): FolderRepository
         fun timerManager(): WallpaperTimerManager
         fun shuffleHistoryManager(): ShuffleHistoryManager
+        fun scheduleManager(): com.klvw.wallpaper.schedule.ScheduleManager
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -54,10 +55,10 @@ class WallpaperTimerReceiver : BroadcastReceiver() {
                           || ep.prefs().generalPausedTimers.first().contains(key)
                 if (!paused && ep.prefs().appEnabled.first()) {
                     val (type, target) = keyToTypeTarget(key)
-                    val uri = defaultFolderUri(ep.prefs(), type, target)
+                    val uri = ep.scheduleManager().resolveFolderUri(target, type)
                     if (uri != null) {
                         val allItems = ep.folderRepository().getItemsFromFolder(uri, type)
-                    val item = ep.shuffleHistoryManager().pickNext(allItems, uri, type)
+                        val item = ep.shuffleHistoryManager().pickNext(allItems, uri, type)
                         if (item != null) ep.wallpaperRepository().setWallpaper(item, target)
                     }
                 }
@@ -81,16 +82,6 @@ class WallpaperTimerReceiver : BroadcastReceiver() {
         "lock_image" -> FolderType.IMAGE to WallpaperTarget.LOCK
         "lock_video" -> FolderType.VIDEO to WallpaperTarget.LOCK
         else -> throw IllegalArgumentException("Unknown timer key: $key")
-    }
-
-    private suspend fun defaultFolderUri(
-        prefs: SettingsPreferences, type: FolderType, target: WallpaperTarget
-    ): String? = when {
-        type == FolderType.IMAGE && target == WallpaperTarget.HOME -> prefs.defaultHomeImageFolderUri.first()
-        type == FolderType.IMAGE && target == WallpaperTarget.LOCK -> prefs.defaultLockImageFolderUri.first()
-        type == FolderType.VIDEO && target == WallpaperTarget.HOME -> prefs.defaultHomeVideoFolderUri.first()
-        type == FolderType.VIDEO && target == WallpaperTarget.LOCK -> prefs.defaultLockVideoFolderUri.first()
-        else -> null
     }
 
     private suspend fun intervalForKey(prefs: SettingsPreferences, key: String): Int = when (key) {

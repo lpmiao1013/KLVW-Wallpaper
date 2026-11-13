@@ -13,6 +13,7 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -26,6 +27,7 @@ class KLVWQuickSetActivity : ComponentActivity() {
     @Inject lateinit var folderRepository: FolderRepository
     @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
     @Inject lateinit var timerManager: WallpaperTimerManager
+    @Inject lateinit var scheduleManager: ScheduleManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +54,15 @@ class KLVWQuickSetActivity : ComponentActivity() {
     }
 
     private suspend fun applyAction(action: String, target: WallpaperTarget) {
+        if (scheduleManager.isEnabled() && target != WallpaperTarget.BOTH) {
+            val rule = scheduleManager.currentRule(target) ?: return
+            val item = shuffleHistoryManager.pickNext(
+                folderRepository.getItemsFromFolder(rule.folderUri, rule.media),
+                rule.folderUri, rule.media
+            ) ?: return
+            wallpaperRepository.setWallpaper(item, target)
+            return
+        }
         when (action) {
             "random_image" -> {
                 val uri = resolveDefaultFolderUri(FolderType.IMAGE, target) ?: return
@@ -68,6 +79,7 @@ class KLVWQuickSetActivity : ComponentActivity() {
                 wallpaperRepository.setWallpaper(item, target)
             }
             "static_image" -> {
+                if (scheduleManager.isEnabled()) return
                 val uri = when (target) {
                     WallpaperTarget.HOME -> prefs.quickSetHomeStaticUri.first()
                     WallpaperTarget.LOCK -> prefs.quickSetLockStaticUri.first()

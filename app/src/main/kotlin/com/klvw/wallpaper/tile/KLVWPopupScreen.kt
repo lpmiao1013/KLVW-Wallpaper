@@ -260,7 +260,16 @@ fun KLVWPopupScreen(
                                 TextButton(
                                     onClick = {
                                         scope.launch {
-                                            viewModel.onFolderSelected(item.mediaType, item.target, folder.uri)
+                                            val ok = viewModel.onFolderSelected(
+                                                item.mediaType, item.target, folder.uri
+                                            )
+                                            if (!ok) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "时段方案已启用，无法修改默认文件夹",
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                             pendingFolderItem = null
                                         }
                                     },
@@ -342,7 +351,16 @@ fun KLVWPopupScreen(
                 defaultLockImageUri = defaultLockImageFolderUri,
                 defaultLockVideoUri = defaultLockVideoFolderUri,
                 onFolderSelected = { target, mediaType, uri ->
-                    scope.launch { viewModel.onFolderSelected(mediaType, target, uri) }
+                    scope.launch {
+                        val ok = viewModel.onFolderSelected(mediaType, target, uri)
+                        if (!ok) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "时段方案已启用，无法修改默认文件夹",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
                 },
                 onDismiss = { showFolderManagerDialog = false }
             )
@@ -842,6 +860,7 @@ private fun FileSelectOverlay(
     viewModel: KLVWPopupViewModel,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var selectedTarget by remember { mutableStateOf("home") }
@@ -1023,8 +1042,18 @@ private fun FileSelectOverlay(
                                                     folder.uri
                                                 )
                                             }
-                                            viewModel.setFileWallpaper(wallpaperItem, selectedTarget)
-                                            onDismiss()
+                                            val ok = viewModel.setFileWallpaper(
+                                                wallpaperItem, selectedTarget
+                                            )
+                                            if (!ok) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "时段方案已启用，请从当前时段文件夹选择",
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                ).show()
+                                            } else {
+                                                onDismiss()
+                                            }
                                         }
                                     }
                                 )

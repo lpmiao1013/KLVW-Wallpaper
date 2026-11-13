@@ -10,6 +10,7 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.schedule.ScheduleManager
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -29,6 +30,7 @@ class ScreenUnlockReceiver : BroadcastReceiver() {
         fun folderRepository(): FolderRepository
         fun timerManager(): WallpaperTimerManager
         fun shuffleHistoryManager(): ShuffleHistoryManager
+        fun scheduleManager(): ScheduleManager
     }
 
     private data class UnlockCandidate(
@@ -48,24 +50,33 @@ class ScreenUnlockReceiver : BroadcastReceiver() {
                 val prefs = ep.prefs()
                 if (!prefs.appEnabled.first()) return@launch
 
-                // Pick among enabled types that actually have items — do NOT fall through
-                // image → video on empty/failed image (that made lock "switch to video mode").
-                val appliedHome = applyOneForScreen(
-                    imageEnabled = prefs.displayControlHomeImage.first(),
-                    imageFolder = prefs.defaultHomeImageFolderUri.first(),
-                    videoEnabled = prefs.displayControlHomeVideo.first(),
-                    videoFolder = prefs.defaultHomeVideoFolderUri.first(),
-                    target = WallpaperTarget.HOME,
-                    ep = ep
-                )
-                val appliedLock = applyOneForScreen(
-                    imageEnabled = prefs.displayControlLockImage.first(),
-                    imageFolder = prefs.defaultLockImageFolderUri.first(),
-                    videoEnabled = prefs.displayControlLockVideo.first(),
-                    videoFolder = prefs.defaultLockVideoFolderUri.first(),
-                    target = WallpaperTarget.LOCK,
-                    ep = ep
-                )
+                val scheduleOn = ep.scheduleManager().isEnabled()
+                val appliedHome = if (scheduleOn) {
+                    applyScheduleForScreen(WallpaperTarget.HOME, ep)
+                } else {
+                    // Pick among enabled types that actually have items — do NOT fall through
+                    // image → video on empty/failed image (that made lock "switch to video mode").
+                    applyOneForScreen(
+                        imageEnabled = prefs.displayControlHomeImage.first(),
+                        imageFolder = prefs.defaultHomeImageFolderUri.first(),
+                        videoEnabled = prefs.displayControlHomeVideo.first(),
+                        videoFolder = prefs.defaultHomeVideoFolderUri.first(),
+                        target = WallpaperTarget.HOME,
+                        ep = ep
+                    )
+                }
+                val appliedLock = if (scheduleOn) {
+                    applyScheduleForScreen(WallpaperTarget.LOCK, ep)
+                } else {
+                    applyOneForScreen(
+                        imageEnabled = prefs.displayControlLockImage.first(),
+                        imageFolder = prefs.defaultLockImageFolderUri.first(),
+                        videoEnabled = prefs.displayControlLockVideo.first(),
+                        videoFolder = prefs.defaultLockVideoFolderUri.first(),
+                        target = WallpaperTarget.LOCK,
+                        ep = ep
+                    )
+                }
 
                 if (appliedHome && prefs.displayControlResetHomeTimer.first()) {
                     resetTimersForScreen("home", prefs, ep.timerManager())
@@ -93,6 +104,18 @@ class ScreenUnlockReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
+    }
+
+    private suspend fun applyScheduleForScreen(
+        target: WallpaperTarget,
+        ep: UnlockEntryPoint
+    ): Boolean {
+        val rule = ep.scheduleManager().currentRule(target) ?: return false
+        val items = ep.folderRepository().getItemsFromFolder(rule.folderUri, rule.media)
+        val item = ep.shuffleHistoryManager().pickNext(items, rule.folderUri, rule.media)
+            ?: return false
+        ep.wallpaperRepository().setWallpaper(item, target)
+        return true
     }
 
     /**
