@@ -64,6 +64,13 @@ class KLVWallpaperServiceLock : WallpaperService() {
         private var isVideo = false
         private var forceIconColor: String = "auto"
         private var computedWallpaperColors: WallpaperColors? = null
+        private var resizeJob: Job? = null
+        private var lastSurfaceW = 0
+        private var lastSurfaceH = 0
+        @Volatile private var lastUri: String? = null
+        @Volatile private var lastScaleMode: WallpaperScaleMode = WallpaperScaleMode.FILL
+        @Volatile private var lastRotateEn = false
+        @Volatile private var lastRotateCw = true
 
         private val screenOffReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
@@ -163,11 +170,23 @@ class KLVWallpaperServiceLock : WallpaperService() {
                     LockCollectQuad(state.first, state.second, scale, rotateEn, rotateCw)
                 }.collect { q ->
                     try {
+                        resizeJob?.cancel()
                         // Await video GL teardown before image EGL binds the same Surface.
                         releaseRenderersSuspending()
                         val uri = q.uri ?: return@collect
                         isVideo = q.isVideo
                         val mode = WallpaperScaleMode.fromPref(q.scale)
+                        lastUri = uri
+                        lastScaleMode = mode
+                        lastRotateEn = q.rotateEn
+                        lastRotateCw = q.rotateCw
+                        val frame = holder.surfaceFrame
+                        val sw = if (frame.width() > 0) frame.width() else lastSurfaceW
+                        val sh = if (frame.height() > 0) frame.height() else lastSurfaceH
+                        if (sw > 0 && sh > 0) {
+                            lastSurfaceW = sw
+                            lastSurfaceH = sh
+                        }
                         if (q.isVideo) {
                             videoRenderer = VideoRenderer(applicationContext, displayUtils)
                             videoRenderer!!.load(
@@ -176,7 +195,7 @@ class KLVWallpaperServiceLock : WallpaperService() {
                         } else {
                             imageRenderer = EGLImageRenderer(applicationContext, displayUtils)
                             imageRenderer!!.load(
-                                Uri.parse(uri), holder, mode, q.rotateEn, q.rotateCw
+                                Uri.parse(uri), holder, mode, q.rotateEn, q.rotateCw, sw, sh
                             )
                         }
                         loadColorsAsync(Uri.parse(uri), q.isVideo)
@@ -191,7 +210,30 @@ class KLVWallpaperServiceLock : WallpaperService() {
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)
-            if (!isVideo) imageRenderer?.render(holder)
+            if (width <= 0 || height <= 0) return
+            if (width == lastSurfaceW && height == lastSurfaceH) return
+            lastSurfaceW = width
+            lastSurfaceH = height
+            if (isVideo) {
+                videoRenderer?.surfaceChanged(width, height)
+                return
+            }
+            val uri = lastUri ?: return
+            val mode = lastScaleMode
+            val rotateEn = lastRotateEn
+            val rotateCw = lastRotateCw
+            resizeJob?.cancel()
+            resizeJob = scope.launch {
+                try {
+                    val renderer = imageRenderer ?: return@launch
+                    renderer.load(
+                        Uri.parse(uri), holder, mode, rotateEn, rotateCw, width, height
+                    )
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                }
+            }
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
@@ -206,6 +248,8 @@ class KLVWallpaperServiceLock : WallpaperService() {
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
             collectorJob?.cancel()
             collectorJob = null
+            resizeJob?.cancel()
+            resizeJob = null
             colorJob?.cancel()
             colorJob = null
             videoRenderer?.detachSurface()
@@ -217,6 +261,8 @@ class KLVWallpaperServiceLock : WallpaperService() {
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
             collectorJob?.cancel()
             collectorJob = null
+            resizeJob?.cancel()
+            resizeJob = null
             colorJob?.cancel()
             colorJob = null
             release()

@@ -148,8 +148,11 @@ class VideoRenderer(
         this.rotateMismatchCw = rotateMismatchCw
 
         val metrics = displayUtils.getScreenMetrics()
-        screenW = metrics.widthPx
-        screenH = metrics.heightPx
+        val frame = holder.surfaceFrame
+        // Prefer the live wallpaper surface size — WindowManager can lag after
+        // returning from a landscape app and would bake the wrong aspect.
+        screenW = if (frame.width() > 0) frame.width() else metrics.widthPx
+        screenH = if (frame.height() > 0) frame.height() else metrics.heightPx
         val probed = probeDisplaySize(uri)
         videoW = probed.first
         videoH = probed.second
@@ -258,6 +261,61 @@ class VideoRenderer(
         } catch (_: Exception) {}
     }
     fun resume() = postToPlayerThread { try { player?.play() } catch (_: Exception) {} }
+
+    /**
+     * Viewport / OEM surface buffer resize (e.g. after a landscape app exits).
+     * Updates FIT/FILL math and recreates the EGL window so the buffer matches
+     * the new surface — glViewport alone leaves a stale buffer on some devices.
+     */
+    fun surfaceChanged(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        val handler = glHandler
+        if (handler == null) {
+            screenW = width
+            screenH = height
+            return
+        }
+        handler.post {
+            val sizeChanged = screenW != width || screenH != height
+            screenW = width
+            screenH = height
+            if (!usingGlPath || !sizeChanged) return@post
+            val holder = surfaceHolder ?: return@post
+            val surface = holder.surface
+            if (surface == null || !surface.isValid) return@post
+            val config = cfg ?: return@post
+            try {
+                if (eglSurf != EGL14.EGL_NO_SURFACE) {
+                    EGL14.eglMakeCurrent(
+                        display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT
+                    )
+                    EGL14.eglDestroySurface(display, eglSurf)
+                    eglSurf = EGL14.EGL_NO_SURFACE
+                }
+                eglSurf = EGL14.eglCreateWindowSurface(
+                    display, config, surface, intArrayOf(EGL14.EGL_NONE), 0
+                )
+                if (eglSurf == EGL14.EGL_NO_SURFACE) return@post
+                if (!EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)) return@post
+                // Re-present last frame with the new quad / viewport (no new decode).
+                redrawLastFrame()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    /** Draw using the last uploaded OES frame + ST matrix (skip updateTexImage). */
+    private fun redrawLastFrame() {
+        if (!usingGlPath) return
+        if (display == EGL14.EGL_NO_DISPLAY || eglSurf == EGL14.EGL_NO_SURFACE) return
+        if (surfaceTexture == null || tex[0] == 0) return
+        try {
+            if (!EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)) return
+            drawFrame()
+            EGL14.eglSwapBuffers(display, eglSurf)
+        } catch (_: Throwable) {
+        }
+    }
 
     /**
      * Fire-and-forget cleanup for onDestroy / detach.

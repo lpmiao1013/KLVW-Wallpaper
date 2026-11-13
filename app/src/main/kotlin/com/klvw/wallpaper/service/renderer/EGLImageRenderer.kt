@@ -38,29 +38,50 @@ class EGLImageRenderer(
     private var uvAttr = 0
     private var hasTexture = false
     private var lastSurface: Surface? = null
+    private var viewportW = 0
+    private var viewportH = 0
 
     suspend fun load(
         uri: Uri,
         holder: SurfaceHolder,
         scaleMode: WallpaperScaleMode = WallpaperScaleMode.FILL,
         rotateMismatchEnabled: Boolean = false,
-        rotateMismatchCw: Boolean = true
+        rotateMismatchCw: Boolean = true,
+        surfaceWidth: Int = 0,
+        surfaceHeight: Int = 0
     ) {
         val metrics = displayUtils.getScreenMetrics()
+        val frame = holder.surfaceFrame
+        // Prefer the engine surface size (authoritative after landscape apps).
+        val targetW = when {
+            surfaceWidth > 0 -> surfaceWidth
+            frame.width() > 0 -> frame.width()
+            else -> metrics.widthPx
+        }
+        val targetH = when {
+            surfaceHeight > 0 -> surfaceHeight
+            frame.height() > 0 -> frame.height()
+            else -> metrics.heightPx
+        }
+        viewportW = targetW
+        viewportH = targetH
         val bmp = withContext(Dispatchers.IO) {
-            val decoded = decodeBitmap(uri, metrics.widthPx, metrics.heightPx) ?: return@withContext null
+            val decoded = decodeBitmap(uri, targetW, targetH) ?: return@withContext null
             val rotate = if (WallpaperLayout.shouldAutoRotate(
-                    decoded.width, decoded.height, metrics.widthPx, metrics.heightPx, rotateMismatchEnabled
+                    decoded.width, decoded.height, targetW, targetH, rotateMismatchEnabled
                 )
             ) rotateMismatchCw else null
             WallpaperLayout.layoutToScreen(
-                decoded, metrics.widthPx, metrics.heightPx, scaleMode, rotate
+                decoded, targetW, targetH, scaleMode, rotate
             ).also {
                 if (it !== decoded) decoded.recycle()
             }
         }
         coroutineContext.ensureActive()
         if (bmp != null) {
+            // Same Surface object can grow/shrink after rotation — force a fresh
+            // EGL window buffer or the old landscape buffer stays stretched.
+            invalidateWindowSurface()
             setup(holder)
             uploadAndDraw(bmp)
             bmp.recycle()
@@ -71,6 +92,26 @@ class EGLImageRenderer(
         if (!hasTexture) return
         bindSurface(holder)
         draw()
+    }
+
+    /** Drop the EGL window so the next bind picks up the current surface buffer size. */
+    fun invalidateWindowSurface() {
+        if (display == EGL14.EGL_NO_DISPLAY) {
+            lastSurface = null
+            return
+        }
+        try {
+            if (eglSurf != EGL14.EGL_NO_SURFACE) {
+                EGL14.eglMakeCurrent(
+                    display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT
+                )
+                EGL14.eglDestroySurface(display, eglSurf)
+                eglSurf = EGL14.EGL_NO_SURFACE
+            }
+        } catch (_: Throwable) {
+            eglSurf = EGL14.EGL_NO_SURFACE
+        }
+        lastSurface = null
     }
 
     private fun setup(holder: SurfaceHolder) {
@@ -141,6 +182,9 @@ class EGLImageRenderer(
         val buf = ByteBuffer.allocateDirect(v.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         buf.put(v)
 
+        val vw = viewportW.coerceAtLeast(1)
+        val vh = viewportH.coerceAtLeast(1)
+        GLES20.glViewport(0, 0, vw, vh)
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glUseProgram(prog)
