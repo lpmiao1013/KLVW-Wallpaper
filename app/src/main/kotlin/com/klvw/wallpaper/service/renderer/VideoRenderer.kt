@@ -30,7 +30,10 @@ import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 /**
  * Video live-wallpaper renderer.
@@ -219,6 +222,7 @@ class VideoRenderer(
         generation.incrementAndGet()
         val handler = glHandler
         val thread = glThread
+        val holder = surfaceHolder
         glHandler = null
         glThread = null
         surfaceHolder = null
@@ -226,11 +230,11 @@ class VideoRenderer(
 
         if (handler != null && thread != null && thread.isAlive) {
             handler.post {
-                releasePlayerAndGl()
+                releasePlayerAndGl(holder)
                 thread.quitSafely()
             }
         } else {
-            releasePlayerAndGl()
+            releasePlayerAndGl(holder)
         }
     }
 
@@ -243,37 +247,49 @@ class VideoRenderer(
         generation.incrementAndGet()
         val handler = glHandler
         val thread = glThread
+        val holder = surfaceHolder
         glHandler = null
         glThread = null
         surfaceHolder = null
         usingGlPath = false
 
         if (handler == null || thread == null || !thread.isAlive) {
-            releasePlayerAndGl()
+            releasePlayerAndGl(holder)
+            // Brief settle so the next eglCreateWindowSurface can attach.
+            delay(32)
             return
         }
 
         suspendCancellableCoroutine { cont ->
             val posted = handler.post {
                 try {
-                    releasePlayerAndGl()
+                    releasePlayerAndGl(holder)
                 } finally {
                     thread.quitSafely()
                     if (cont.isActive) cont.resume(Unit)
                 }
             }
             if (!posted && cont.isActive) {
-                releasePlayerAndGl()
+                releasePlayerAndGl(holder)
                 thread.quitSafely()
                 cont.resume(Unit)
             }
         }
+        // Ensure GL thread finished destroying the window surface before image EGL binds.
+        withContext(Dispatchers.IO) {
+            try { thread.join(1500) } catch (_: InterruptedException) {}
+        }
+        delay(32)
     }
 
-    private fun releasePlayerAndGl() {
+    private fun releasePlayerAndGl(holder: SurfaceHolder? = surfaceHolder) {
         try { player?.removeListener(playerListener) } catch (_: Exception) {}
         try { player?.stop() } catch (_: Exception) {}
         try { player?.clearVideoSurface() } catch (_: Exception) {}
+        // Fallback path used setVideoSurfaceHolder — clearVideoSurface alone is not enough.
+        if (holder != null) {
+            try { player?.clearVideoSurfaceHolder(holder) } catch (_: Exception) {}
+        }
         try { player?.release() } catch (_: Exception) {}
         player = null
         releaseGlOnly()

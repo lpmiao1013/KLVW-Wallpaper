@@ -15,7 +15,9 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.util.DisplayUtils
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
@@ -60,23 +62,46 @@ class EGLImageRenderer(
             }
         }
         coroutineContext.ensureActive()
-        if (bmp != null) {
-            setup(holder)
-            uploadAndDraw(bmp)
-            bmp.recycle()
+        if (bmp == null) return
+
+        // After video GL / SurfaceHolder playback, the wallpaper Surface may stay busy briefly.
+        var drawn = false
+        var lastError: Throwable? = null
+        for (attempt in 0 until 4) {
+            coroutineContext.ensureActive()
+            try {
+                if (!setup(holder)) {
+                    throw IllegalStateException("EGL setup/bind failed")
+                }
+                uploadAndDraw(bmp)
+                drawn = true
+                break
+            } catch (e: Throwable) {
+                lastError = e
+                Log.w(TAG, "image EGL load attempt ${attempt + 1}/4 failed", e)
+                // Drop a half-bound context so the next try starts clean.
+                try { release() } catch (_: Throwable) {}
+                delay(50L * (attempt + 1))
+            }
+        }
+        bmp.recycle()
+        if (!drawn) {
+            throw lastError ?: IllegalStateException("image EGL load failed")
         }
     }
 
     fun render(holder: SurfaceHolder) {
         if (!hasTexture) return
-        bindSurface(holder)
+        if (!bindSurface(holder)) return
         draw()
     }
 
-    private fun setup(holder: SurfaceHolder) {
+    /** @return false if the wallpaper surface could not be bound for GLES. */
+    private fun setup(holder: SurfaceHolder): Boolean {
         if (display == EGL14.EGL_NO_DISPLAY) {
             display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-            EGL14.eglInitialize(display, null, 0, null, 0)
+            if (display == EGL14.EGL_NO_DISPLAY) return false
+            if (!EGL14.eglInitialize(display, null, 0, null, 0)) return false
             val attribs = intArrayOf(
                 EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
                 EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8,
@@ -85,29 +110,47 @@ class EGLImageRenderer(
             )
             val cfgs = arrayOfNulls<EGLConfig>(1)
             val n = IntArray(1)
-            EGL14.eglChooseConfig(display, attribs, 0, cfgs, 0, 1, n, 0)
+            if (!EGL14.eglChooseConfig(display, attribs, 0, cfgs, 0, 1, n, 0) || n[0] <= 0) {
+                return false
+            }
             cfg = cfgs[0]!!
             val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
             eglCtx = EGL14.eglCreateContext(display, cfg!!, EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
+            if (eglCtx == EGL14.EGL_NO_CONTEXT) return false
         }
-        bindSurface(holder)
+        if (!bindSurface(holder)) return false
         if (prog == 0) initShaders()
+        return prog != 0
     }
 
-    private fun bindSurface(holder: SurfaceHolder) {
-        if (display == EGL14.EGL_NO_DISPLAY || eglCtx == EGL14.EGL_NO_CONTEXT) return
+    private fun bindSurface(holder: SurfaceHolder): Boolean {
+        if (display == EGL14.EGL_NO_DISPLAY || eglCtx == EGL14.EGL_NO_CONTEXT || cfg == null) {
+            return false
+        }
         val s = holder.surface
+        if (s == null || !s.isValid) return false
         if (s == lastSurface && eglSurf != EGL14.EGL_NO_SURFACE) {
-            EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)
-            return
+            return EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)
         }
         if (eglSurf != EGL14.EGL_NO_SURFACE) {
             EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
             EGL14.eglDestroySurface(display, eglSurf)
+            eglSurf = EGL14.EGL_NO_SURFACE
         }
         eglSurf = EGL14.eglCreateWindowSurface(display, cfg!!, s, intArrayOf(EGL14.EGL_NONE), 0)
-        EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)
+        if (eglSurf == null || eglSurf == EGL14.EGL_NO_SURFACE) {
+            eglSurf = EGL14.EGL_NO_SURFACE
+            lastSurface = null
+            return false
+        }
+        if (!EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)) {
+            EGL14.eglDestroySurface(display, eglSurf)
+            eglSurf = EGL14.EGL_NO_SURFACE
+            lastSurface = null
+            return false
+        }
         lastSurface = s
+        return true
     }
 
     private fun initShaders() {
@@ -214,5 +257,9 @@ class EGLImageRenderer(
         var s = 1; var w = sw / 2; var h = sh / 2
         while (w >= dw && h >= dh) { s *= 2; w /= 2; h /= 2 }
         return s
+    }
+
+    companion object {
+        private const val TAG = "EGLImageRenderer"
     }
 }
