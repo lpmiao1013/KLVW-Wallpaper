@@ -214,18 +214,17 @@ class KLVWallpaperService : WallpaperService() {
             }
         }
 
-        override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (event.actionMasked == MotionEvent.ACTION_UP) {
-                val now = SystemClock.uptimeMillis()
-                val timeout = ViewConfiguration.getDoubleTapTimeout().toLong()
-                if (lastTapUptimeMs > 0L && now - lastTapUptimeMs <= timeout) {
-                    lastTapUptimeMs = 0L
-                    advanceByDoubleTap()
-                } else {
-                    lastTapUptimeMs = now
-                }
+        // Engine.onTouchEvent is Unit on current SDK (not boolean like View).
+        override fun onTouchEvent(event: MotionEvent) {
+            if (event.actionMasked != MotionEvent.ACTION_UP) return
+            val now = SystemClock.uptimeMillis()
+            val timeout = ViewConfiguration.getDoubleTapTimeout().toLong()
+            if (lastTapUptimeMs > 0L && now - lastTapUptimeMs <= timeout) {
+                lastTapUptimeMs = 0L
+                advanceByDoubleTap()
+            } else {
+                lastTapUptimeMs = now
             }
-            return true
         }
 
         private fun advanceByDoubleTap() {
