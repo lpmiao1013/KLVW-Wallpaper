@@ -86,6 +86,29 @@ class VideoRenderer(
 
     private val stMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
+    private val texMatrix = FloatArray(16)
+
+    companion object {
+        /**
+         * Extra 90° UV turn for orientation mismatch — same matrices as
+         * WallpaperSwitcher (column-major):
+         * CW:  x' = y,     y' = 1 - x
+         * CCW: x' = 1 - y, y' = x
+         * Applied as R * SurfaceTextureMatrix so text is not mirrored.
+         */
+        private val EXTRA_ROTATE_90_CW = floatArrayOf(
+            0f, -1f, 0f, 0f,
+            1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            0f, 1f, 0f, 1f
+        )
+        private val EXTRA_ROTATE_90_CCW = floatArrayOf(
+            0f, 1f, 0f, 0f,
+            -1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 0f, 0f, 1f
+        )
+    }
 
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
@@ -407,19 +430,11 @@ class VideoRenderer(
         Matrix.translateM(mvpMatrix, 0, dest.left, dest.top, 0f)
         Matrix.scaleM(mvpMatrix, 0, dest.width(), dest.height(), 1f)
 
-        // ST first (decoder orientation / crop), then optional 90° around UV center.
-        // Do NOT remap UV corners manually — that fights SurfaceTexture's matrix and
-        // often yields a mirrored frame (video "looks rotated" but text is reversed).
-        val texMatrix = FloatArray(16)
+        // Match WallpaperSwitcher: R * SurfaceTextureMatrix with fixed UV 90° matrices.
+        // Center rotateM / corner UV remaps both produced mirrored text here.
         if (rotate) {
-            val rot = FloatArray(16)
-            Matrix.setIdentityM(rot, 0)
-            Matrix.translateM(rot, 0, 0.5f, 0.5f, 0f)
-            // rotateM is CCW in UV space; match Bitmap clockwise via opposite sign after ST.
-            val deg = if (rotateMismatchCw) -90f else 90f
-            Matrix.rotateM(rot, 0, deg, 0f, 0f, 1f)
-            Matrix.translateM(rot, 0, -0.5f, -0.5f, 0f)
-            Matrix.multiplyMM(texMatrix, 0, rot, 0, stMatrix, 0)
+            val r = if (rotateMismatchCw) EXTRA_ROTATE_90_CW else EXTRA_ROTATE_90_CCW
+            Matrix.multiplyMM(texMatrix, 0, r, 0, stMatrix, 0)
         } else {
             System.arraycopy(stMatrix, 0, texMatrix, 0, 16)
         }
