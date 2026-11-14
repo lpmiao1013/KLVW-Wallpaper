@@ -57,7 +57,6 @@ import com.klvw.wallpaper.util.PermissionUtils
 import java.util.UUID
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-
 @Composable
 fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
     val context = LocalContext.current
@@ -253,6 +252,14 @@ private fun ScheduleGroupEditorDialog(
                         onDelete = { rules = rules.filter { it.id != rule.id } }
                     )
                 }
+            }
+        },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 TextButton(onClick = {
                     editingRule = ScheduleRule(
                         target = WallpaperTarget.HOME,
@@ -261,18 +268,17 @@ private fun ScheduleGroupEditorDialog(
                         startMinute = 0,
                         endMinute = 0
                     )
-                }) {
-                    Text("添加规则")
+                }) { Text("添加规则") }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                    Button(onClick = {
+                        onSave(initial.copy(name = name.ifBlank { "未命名分组" }, rules = rules))
+                    }) { Text("保存") }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                onSave(initial.copy(name = name.ifBlank { "未命名分组" }, rules = rules))
-            }) { Text("保存") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
 
