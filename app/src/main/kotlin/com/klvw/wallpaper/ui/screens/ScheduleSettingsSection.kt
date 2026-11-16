@@ -311,7 +311,7 @@ private fun RuleRow(
     val target = if (rule.target == WallpaperTarget.LOCK) "锁屏" else "桌面"
     val media = if (rule.media == FolderType.VIDEO) "视频" else "图片"
     val time = "${ScheduleMath.formatMinute(rule.startMinute)}–${ScheduleMath.formatMinute(rule.endMinute)}"
-    val folder = rule.folderUri.substringAfterLast('%').substringAfterLast('/').ifBlank { "未选文件夹" }
+    val folder = folderDisplayName(rule.folderUri)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -385,7 +385,7 @@ private fun RuleEditorDialog(
                 }
                 if (draft.folderUri.isNotBlank()) {
                     Text(
-                        draft.folderUri,
+                        folderDisplayName(draft.folderUri),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -427,6 +427,16 @@ private fun RuleEditorDialog(
 }
 
 private enum class TimePickTarget { START, END }
+
+/** Friendly folder label from a SAF tree URI (matches SettingsScreen). */
+private fun folderDisplayName(uri: String): String {
+    if (uri.isBlank()) return "未选文件夹"
+    return Uri.parse(uri).lastPathSegment
+        ?.substringAfterLast(':')
+        ?.let { Uri.decode(it) }
+        ?.ifBlank { null }
+        ?: Uri.decode(uri.substringAfterLast('/')).ifBlank { uri }
+}
 
 @Composable
 private fun TimeFieldRow(
