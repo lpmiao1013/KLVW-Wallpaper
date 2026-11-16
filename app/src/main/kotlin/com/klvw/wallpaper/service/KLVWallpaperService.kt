@@ -84,8 +84,8 @@ class KLVWallpaperService : WallpaperService() {
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
-            // Allow + request a full-display buffer; default OEM surface can be ~720p or smaller.
-            setFixedSizeAllowed(true)
+            // Request a full-display buffer; default OEM surface can be ~720p or smaller.
+            // (setFixedSizeAllowed is framework/hidden — not in the public SDK stubs.)
             displayUtils.requestFullDisplaySurface(surfaceHolder)
         }
 

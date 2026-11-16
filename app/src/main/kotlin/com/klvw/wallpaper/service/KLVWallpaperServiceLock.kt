@@ -75,7 +75,7 @@ class KLVWallpaperServiceLock : WallpaperService() {
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
-            setFixedSizeAllowed(true)
+            // setFixedSizeAllowed is framework/hidden — not in the public SDK stubs.
             displayUtils.requestFullDisplaySurface(surfaceHolder)
         }
 
