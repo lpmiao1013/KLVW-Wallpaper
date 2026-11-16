@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -336,7 +337,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedButton(
                 onClick = {
@@ -348,8 +349,12 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (state.mediaTab == MediaTab.STATIC) "添加图片" else "从相册选择")
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    if (state.mediaTab == MediaTab.STATIC) "添加图片" else "从相册选择",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Button(
                 onClick = { viewModel.setWallpaper() },
@@ -360,7 +365,23 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
                 if (state.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
-                    Text("设为壁纸")
+                    Text("设为壁纸", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (state.mediaTab != MediaTab.STATIC) {
+                OutlinedButton(
+                    onClick = { viewModel.refreshPreviewList() },
+                    enabled = !state.isLoadingPreview && !state.isLoading,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (state.isLoadingPreview) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("刷新列表", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -531,10 +552,13 @@ private fun MediaPreviewDialog(
                             VideoPlaybackPositions.set(
                                 item.uri.toString(),
                                 positionMs,
-                                durationMs
+                                durationMs,
+                                fromUser = true
                             )
                             val sec = positionMs / 1000
-                            startSavedHint = "已设起点 ${sec / 60}:${("%02d").format(sec % 60)}"
+                            startSavedHint =
+                                if (positionMs < 1_000L) "起点过近开头，已清除续播点（请拖到 ≥1 秒）"
+                                else "已设起点 ${sec / 60}:${("%02d").format(sec % 60)}，壁纸将从此续播"
                         }
                     )
                     startSavedHint?.let { hint ->
@@ -647,16 +671,7 @@ private fun VideoPlayer(
     DisposableEffect(player) {
         onDispose { player.release() }
     }
-    Box(modifier = modifier) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    this.player = player
-                    useController = true
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+    Column(modifier = modifier) {
         Button(
             onClick = {
                 val pos = player.currentPosition
@@ -667,14 +682,25 @@ private fun VideoPlayer(
                 )
             },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 56.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
             )
         ) {
             Text("设为起点（续播节点）")
         }
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    this.player = player
+                    useController = true
+                }
+            },
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        )
     }
 }
 

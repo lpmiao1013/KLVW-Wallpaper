@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +25,10 @@ class FolderRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val folderDao: FolderDao
 ) {
+    /** In-memory folder listing cache. Filled on first scan; cleared only via [invalidateItemsCache]. */
+    private val itemsCache = ConcurrentHashMap<String, List<WallpaperItem>>()
+
+    private fun itemsCacheKey(folderUri: String, type: FolderType) = "$folderUri\u0000${type.name}"
     fun getAllFolders(): Flow<List<FolderEntity>> = folderDao.getAll()
 
     fun getFoldersByType(type: FolderType): Flow<List<FolderEntity>> = folderDao.getByType(type)
@@ -42,7 +47,22 @@ class FolderRepository @Inject constructor(
         return folderDao.insert(FolderEntity(uri = uri, displayName = aerFolder.name, type = type))
     }
 
-    suspend fun removeFolder(folder: FolderEntity) = folderDao.delete(folder)
+    suspend fun removeFolder(folder: FolderEntity) {
+        invalidateItemsCache(folder.uri, folder.type)
+        folderDao.delete(folder)
+    }
+
+    /** Drop cached listings. Pass both args to clear one folder+type; omit to clear all. */
+    fun invalidateItemsCache(folderUri: String? = null, type: FolderType? = null) {
+        when {
+            folderUri != null && type != null -> itemsCache.remove(itemsCacheKey(folderUri, type))
+            folderUri != null -> {
+                val prefix = "$folderUri\u0000"
+                itemsCache.keys.filter { it.startsWith(prefix) }.forEach { itemsCache.remove(it) }
+            }
+            else -> itemsCache.clear()
+        }
+    }
 
     suspend fun touchFolder(id: Long) = folderDao.updateLastUsed(id)
 
@@ -72,15 +92,32 @@ class FolderRepository @Inject constructor(
             ?: emptyList()
     }
 
-    suspend fun getItemsFromFolder(folderUri: String, type: FolderType): List<WallpaperItem> =
+    /**
+     * List media in [folderUri]. Uses an in-memory cache after the first successful scan.
+     * Pass [forceRefresh] = true (e.g. user tapped 刷新列表) to rescan and replace the cache entry.
+     */
+    suspend fun getItemsFromFolder(
+        folderUri: String,
+        type: FolderType,
+        forceRefresh: Boolean = false
+    ): List<WallpaperItem> =
         withContext(Dispatchers.IO) {
-            if (folderUri.startsWith("klvw-aer://")) return@withContext getItemsFromAerFolder(folderUri, type)
-            val results = mutableListOf<WallpaperItem>()
-            try {
-                val rootUri = Uri.parse(folderUri)
-                val rootDocId = DocumentsContract.getTreeDocumentId(rootUri)
-                scanDocumentTree(rootUri, rootDocId, type, folderUri, results, maxDepth = 2)
-            } catch (_: Exception) {}
+            val key = itemsCacheKey(folderUri, type)
+            if (!forceRefresh) {
+                itemsCache[key]?.let { return@withContext it }
+            }
+            val results = if (folderUri.startsWith("klvw-aer://")) {
+                getItemsFromAerFolder(folderUri, type)
+            } else {
+                val scanned = mutableListOf<WallpaperItem>()
+                try {
+                    val rootUri = Uri.parse(folderUri)
+                    val rootDocId = DocumentsContract.getTreeDocumentId(rootUri)
+                    scanDocumentTree(rootUri, rootDocId, type, folderUri, scanned, maxDepth = 2)
+                } catch (_: Exception) {}
+                scanned
+            }
+            itemsCache[key] = results
             results
         }
 

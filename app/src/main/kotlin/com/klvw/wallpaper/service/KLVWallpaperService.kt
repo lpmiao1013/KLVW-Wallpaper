@@ -24,6 +24,7 @@ import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.schedule.ScheduleManager
 import com.klvw.wallpaper.service.renderer.EGLImageRenderer
+import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
 import com.klvw.wallpaper.service.renderer.VideoRenderer
 import com.klvw.wallpaper.util.DisplayUtils
 import dagger.hilt.android.AndroidEntryPoint
@@ -89,6 +90,17 @@ class KLVWallpaperService : WallpaperService() {
             }
         }
 
+        private val userStartReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                if (intent.action != VideoPlaybackPositions.ACTION_USER_START) return
+                val uri = intent.getStringExtra(VideoPlaybackPositions.EXTRA_URI) ?: return
+                if (uri != lastUri || !isVideo) return
+                val pos = intent.getLongExtra(VideoPlaybackPositions.EXTRA_POSITION_MS, -1L)
+                if (pos < 0L) return
+                videoRenderer?.seekToUserStart(pos)
+            }
+        }
+
         // Samsung requires HINT_FROM_BITMAP (set only by fromBitmap()) to trust WallpaperColors.
         // Pure white → maximum luminance → HINT_SUPPORTS_DARK_TEXT set → dark (black) icons.
         // Pure black → zero luminance → HINT_SUPPORTS_DARK_TEXT clear → light (white) icons.
@@ -108,6 +120,11 @@ class KLVWallpaperService : WallpaperService() {
             registerReceiver(
                 screenOffReceiver,
                 IntentFilter(Intent.ACTION_SCREEN_OFF),
+                Context.RECEIVER_NOT_EXPORTED
+            )
+            registerReceiver(
+                userStartReceiver,
+                IntentFilter(VideoPlaybackPositions.ACTION_USER_START),
                 Context.RECEIVER_NOT_EXPORTED
             )
             // Seed with persisted value so the very first onComputeColors() call is correct.
@@ -292,6 +309,7 @@ class KLVWallpaperService : WallpaperService() {
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             super.onSurfaceDestroyed(holder)
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
+            try { unregisterReceiver(userStartReceiver) } catch (_: Exception) {}
             collectorJob?.cancel()
             collectorJob = null
             resizeJob?.cancel()
@@ -305,6 +323,7 @@ class KLVWallpaperService : WallpaperService() {
         override fun onDestroy() {
             super.onDestroy()
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
+            try { unregisterReceiver(userStartReceiver) } catch (_: Exception) {}
             advanceJob?.cancel()
             advanceJob = null
             collectorJob?.cancel()
