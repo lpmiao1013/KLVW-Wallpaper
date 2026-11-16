@@ -105,6 +105,7 @@ class KLVWallpaperServiceLock : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
+            displayUtils.suggestDesiredWallpaperSize()
             registerReceiver(
                 screenOffReceiver,
                 IntentFilter(Intent.ACTION_SCREEN_OFF),

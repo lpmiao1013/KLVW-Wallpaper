@@ -171,7 +171,17 @@ class VideoRenderer(
                 setupEgl(holder)
                 setupGl()
                 val st = SurfaceTexture(tex[0]).also { surfaceTexture = it }
-                if (videoW > 0 && videoH > 0) st.setDefaultBufferSize(videoW, videoH)
+                // Prefer full source pixels for the decoder→OES buffer (not the possibly-small
+                // wallpaper Surface). Fall back to screen size if metadata is missing.
+                val bufW = when {
+                    videoW > 0 -> videoW
+                    else -> screenW
+                }.coerceAtLeast(1)
+                val bufH = when {
+                    videoH > 0 -> videoH
+                    else -> screenH
+                }.coerceAtLeast(1)
+                st.setDefaultBufferSize(bufW, bufH)
                 st.setOnFrameAvailableListener({
                     frameAvailable.set(true)
                     handler.post { if (gen == generation.get()) drainAndDraw() }
@@ -311,6 +321,7 @@ class VideoRenderer(
                 )
                 if (eglSurf == EGL14.EGL_NO_SURFACE) return@post
                 if (!EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)) return@post
+                syncScreenSizeFromEgl()
                 // Re-present last frame with the new quad / viewport (no new decode).
                 redrawLastFrame()
             } catch (_: Throwable) {
@@ -463,6 +474,21 @@ class VideoRenderer(
         eglSurf = EGL14.eglCreateWindowSurface(display, cfg!!, surface, intArrayOf(EGL14.EGL_NONE), 0)
         check(eglSurf != EGL14.EGL_NO_SURFACE) { "eglCreateWindowSurface failed" }
         check(EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)) { "eglMakeCurrent failed" }
+        // surfaceFrame can under-report on some OEM wallpaper Surfaces; EGL size is authoritative.
+        syncScreenSizeFromEgl()
+    }
+
+    /** Read the real drawable buffer size after the EGL window surface exists. */
+    private fun syncScreenSizeFromEgl() {
+        if (display == EGL14.EGL_NO_DISPLAY || eglSurf == EGL14.EGL_NO_SURFACE) return
+        val w = IntArray(1)
+        val h = IntArray(1)
+        if (!EGL14.eglQuerySurface(display, eglSurf, EGL14.EGL_WIDTH, w, 0)) return
+        if (!EGL14.eglQuerySurface(display, eglSurf, EGL14.EGL_HEIGHT, h, 0)) return
+        if (w[0] > 0 && h[0] > 0) {
+            screenW = w[0]
+            screenH = h[0]
+        }
     }
 
     private fun setupGl() {
@@ -479,7 +505,7 @@ class VideoRenderer(
         """.trimIndent()
         val fs = """
             #extension GL_OES_EGL_image_external : require
-            precision mediump float;
+            precision highp float;
             uniform samplerExternalOES uS;
             varying vec2 vT;
             void main() {

@@ -6,6 +6,7 @@ import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.model.WallpaperTarget
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
+import com.klvw.wallpaper.util.DisplayUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -16,12 +17,14 @@ import javax.inject.Singleton
 @Singleton
 class WallpaperRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val prefs: SettingsPreferences
+    private val prefs: SettingsPreferences,
+    private val displayUtils: DisplayUtils
 ) {
     private val wallpaperManager = WallpaperManager.getInstance(context)
 
     suspend fun setWallpaper(item: WallpaperItem, target: WallpaperTarget) = withContext(Dispatchers.IO) {
         if (!prefs.appEnabled.first()) return@withContext
+        displayUtils.suggestDesiredWallpaperSize()
         val isVideo = item.type == FolderType.VIDEO
         when (target) {
             WallpaperTarget.HOME -> {

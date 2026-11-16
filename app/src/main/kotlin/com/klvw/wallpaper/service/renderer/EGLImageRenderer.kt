@@ -149,11 +149,21 @@ class EGLImageRenderer(
         eglSurf = EGL14.eglCreateWindowSurface(display, cfg!!, s, intArrayOf(EGL14.EGL_NONE), 0)
         EGL14.eglMakeCurrent(display, eglSurf, eglSurf, eglCtx)
         lastSurface = s
+        // Prefer real EGL buffer size when SurfaceHolder.surfaceFrame under-reports.
+        val ew = IntArray(1)
+        val eh = IntArray(1)
+        if (EGL14.eglQuerySurface(display, eglSurf, EGL14.EGL_WIDTH, ew, 0) &&
+            EGL14.eglQuerySurface(display, eglSurf, EGL14.EGL_HEIGHT, eh, 0) &&
+            ew[0] > 0 && eh[0] > 0
+        ) {
+            viewportW = ew[0]
+            viewportH = eh[0]
+        }
     }
 
     private fun initShaders() {
         val vs = "attribute vec2 aP;attribute vec2 aT;varying vec2 vT;void main(){gl_Position=vec4(aP,0.,1.);vT=aT;}"
-        val fs = "precision mediump float;uniform sampler2D uS;varying vec2 vT;void main(){gl_FragColor=texture2D(uS,vT);}"
+        val fs = "precision highp float;uniform sampler2D uS;varying vec2 vT;void main(){gl_FragColor=texture2D(uS,vT);}"
         prog = linkProgram(compileShader(GLES20.GL_VERTEX_SHADER, vs), compileShader(GLES20.GL_FRAGMENT_SHADER, fs))
         posAttr = GLES20.glGetAttribLocation(prog, "aP")
         uvAttr  = GLES20.glGetAttribLocation(prog, "aT")
