@@ -149,10 +149,15 @@ class VideoRenderer(
 
         val metrics = displayUtils.getScreenMetrics()
         val frame = holder.surfaceFrame
-        // Prefer the live wallpaper surface size — WindowManager can lag after
-        // returning from a landscape app and would bake the wrong aspect.
-        screenW = if (frame.width() > 0) frame.width() else metrics.widthPx
-        screenH = if (frame.height() > 0) frame.height() else metrics.heightPx
+        val fw = frame.width()
+        val fh = frame.height()
+        // Prefer the live surface when it is already near full display size.
+        // Some OEMs briefly report a tiny surfaceFrame (e.g. ~720×560); using that
+        // as the GL viewport makes 1080p sources look heavily soft when upscaled.
+        val surfaceLooksFull = fw >= (metrics.widthPx * 0.85f).toInt() &&
+            fh >= (metrics.heightPx * 0.85f).toInt()
+        screenW = if (surfaceLooksFull) fw else metrics.widthPx
+        screenH = if (surfaceLooksFull) fh else metrics.heightPx
         val probed = probeDisplaySize(uri)
         videoW = probed.first
         videoH = probed.second
