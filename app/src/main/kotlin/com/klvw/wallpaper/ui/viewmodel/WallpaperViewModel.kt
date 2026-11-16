@@ -56,6 +56,9 @@ data class WallpaperUiState(
     val defaultHomeVideoFolderUri: String? = null,
     val defaultLockVideoFolderUri: String? = null,
     val scheduleEnabled: Boolean = false,
+    /** Currently applied home / lock wallpaper content URIs (from prefs). */
+    val homeAppliedUri: String? = null,
+    val lockAppliedUri: String? = null,
 )
 
 @HiltViewModel
@@ -185,6 +188,14 @@ class WallpaperViewModel @Inject constructor(
             prefs.scheduleEnabled.collect { enabled ->
                 _state.update { it.copy(scheduleEnabled = enabled) }
                 if (enabled) syncFolderToSchedule()
+            }
+        }
+
+        viewModelScope.launch {
+            combine(prefs.homeWallpaperUri, prefs.lockWallpaperUri) { home, lock ->
+                home to lock
+            }.collect { (home, lock) ->
+                _state.update { it.copy(homeAppliedUri = home, lockAppliedUri = lock) }
             }
         }
     }

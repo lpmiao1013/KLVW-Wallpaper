@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -118,6 +120,31 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
     var previewItem by remember { mutableStateOf<WallpaperItem?>(null) }
     val onItemClick = remember(viewModel) { { item: WallpaperItem -> viewModel.selectItem(item) } }
     val onDeleteItem = remember(viewModel) { { item: WallpaperItem -> viewModel.removeStaticImage(item.uri) } }
+    val appliedUri = when (state.target) {
+        WallpaperTarget.LOCK -> state.lockAppliedUri
+        else -> state.homeAppliedUri
+    }
+    val gridState = rememberLazyGridState()
+    // Scroll to the applied item only when the visible set changes (folder/tab/target
+    // load finished) — not on every carousel advance, which would jank large folders.
+    LaunchedEffect(state.selectedFolderUri, state.mediaTab, state.target, state.isLoadingPreview) {
+        if (state.isLoadingPreview) return@LaunchedEffect
+        val uri = when (state.target) {
+            WallpaperTarget.LOCK -> state.lockAppliedUri
+            else -> state.homeAppliedUri
+        }
+        if (uri.isNullOrBlank()) return@LaunchedEffect
+        val items = state.previewItems
+        if (items.isEmpty()) return@LaunchedEffect
+        val idx = items.indexOfFirst { it.uri.toString() == uri }
+        if (idx < 0) return@LaunchedEffect
+        val visible = gridState.layoutInfo.visibleItemsInfo
+        val alreadyVisible = visible.any { it.index == idx }
+        if (!alreadyVisible) {
+            // Instant jump: animateScrollToItem across thousands of rows feels laggy.
+            gridState.scrollToItem(idx)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -281,14 +308,17 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
             else -> {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 90.dp),
+                    state = gridState,
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(16.dp)),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(state.previewItems, key = { it.uri.toString() }) { item ->
+                        val itemUri = item.uri.toString()
                         MediaThumbnail(
                             item = item,
                             isSelected = item.uri == state.selectedItem?.uri,
+                            isApplied = appliedUri != null && itemUri == appliedUri,
                             onClick = remember(item.uri) { { onItemClick(item) } },
                             onLongClick = remember(item.uri) { { previewItem = item } },
                             onDelete = if (state.mediaTab == MediaTab.STATIC) {
@@ -355,10 +385,16 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
 private fun MediaThumbnail(
     item: WallpaperItem,
     isSelected: Boolean,
+    isApplied: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onDelete: (() -> Unit)? = null
 ) {
+    val borderColor = when {
+        isSelected -> MaterialTheme.colorScheme.primary
+        isApplied -> MaterialTheme.colorScheme.tertiary
+        else -> null
+    }
     Box(
         modifier = Modifier
             .aspectRatio(9f / 16f)
@@ -366,7 +402,7 @@ private fun MediaThumbnail(
             .background(Color(0xFF2A2A2A))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .then(
-                if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                if (borderColor != null) Modifier.border(2.dp, borderColor, RoundedCornerShape(8.dp))
                 else Modifier
             )
     ) {
@@ -390,13 +426,39 @@ private fun MediaThumbnail(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
-        if (item.type == FolderType.VIDEO && !isSelected) {
+        if (item.type == FolderType.VIDEO && !isSelected && !isApplied) {
             Icon(
                 Icons.Default.PlayArrow,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.85f),
                 modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(18.dp)
             )
+        }
+        if (isApplied) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Wallpaper,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(Modifier.width(2.dp))
+                Text(
+                    "使用中",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         if (isSelected) {
             Icon(
@@ -406,7 +468,7 @@ private fun MediaThumbnail(
                 modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(20.dp)
             )
         }
-        // Delete button — shown on Static tab thumbnails when not selected
+        // Delete button — shown on Static tab thumbnails when not selected/applied
         if (onDelete != null && !isSelected) {
             Box(
                 modifier = Modifier
