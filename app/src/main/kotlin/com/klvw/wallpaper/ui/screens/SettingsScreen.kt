@@ -1228,10 +1228,10 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
+                Text(
             "分别开关桌面/锁屏定时并设置间隔。同一屏幕图片与视频定时互斥，开一个会关掉另一个。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         val activeTimers = timers.filter { it.enabled }
@@ -1290,10 +1290,10 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                     Text(row.label, style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f))
                     if (row.enabled && paused) {
@@ -1320,12 +1320,12 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
                             )
                         }
                     }
-                    Switch(
+                Switch(
                         checked = row.enabled,
                         onCheckedChange = { popupViewModel.setTimerEnabled(row.key, it) },
-                        modifier = Modifier.height(24.dp)
-                    )
-                }
+                    modifier = Modifier.height(24.dp)
+                )
+            }
                 if (row.enabled) {
                     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                         val density = LocalDensity.current

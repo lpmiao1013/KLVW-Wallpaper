@@ -73,12 +73,6 @@ class KLVWallpaperServiceLock : WallpaperService() {
         @Volatile private var lastRotateEn = false
         @Volatile private var lastRotateCw = true
 
-        override fun onCreate(surfaceHolder: SurfaceHolder) {
-            super.onCreate(surfaceHolder)
-            // setFixedSizeAllowed is framework/hidden — not in the public SDK stubs.
-            displayUtils.requestFullDisplaySurface(surfaceHolder)
-        }
-
         private val screenOffReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 if (intent.action == Intent.ACTION_SCREEN_OFF && isVideo) {
@@ -111,7 +105,6 @@ class KLVWallpaperServiceLock : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            displayUtils.requestFullDisplaySurface(holder)
             registerReceiver(
                 screenOffReceiver,
                 IntentFilter(Intent.ACTION_SCREEN_OFF),

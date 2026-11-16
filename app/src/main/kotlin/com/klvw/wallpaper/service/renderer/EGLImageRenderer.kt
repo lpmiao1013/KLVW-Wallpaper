@@ -52,13 +52,17 @@ class EGLImageRenderer(
     ) {
         val metrics = displayUtils.getScreenMetrics()
         val frame = holder.surfaceFrame
-        val fw = if (surfaceWidth > 0) surfaceWidth else frame.width()
-        val fh = if (surfaceHeight > 0) surfaceHeight else frame.height()
-        // Reject undersized OEM buffers (same issue as VideoRenderer).
-        val surfaceLooksFull = fw >= (metrics.widthPx * 0.85f).toInt() &&
-            fh >= (metrics.heightPx * 0.85f).toInt()
-        val targetW = if (surfaceLooksFull) fw else metrics.widthPx
-        val targetH = if (surfaceLooksFull) fh else metrics.heightPx
+        // Prefer the engine surface size (authoritative after landscape apps).
+        val targetW = when {
+            surfaceWidth > 0 -> surfaceWidth
+            frame.width() > 0 -> frame.width()
+            else -> metrics.widthPx
+        }
+        val targetH = when {
+            surfaceHeight > 0 -> surfaceHeight
+            frame.height() > 0 -> frame.height()
+            else -> metrics.heightPx
+        }
         viewportW = targetW
         viewportH = targetH
         val bmp = withContext(Dispatchers.IO) {

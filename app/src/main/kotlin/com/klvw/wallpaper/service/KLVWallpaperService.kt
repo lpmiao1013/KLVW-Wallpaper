@@ -82,13 +82,6 @@ class KLVWallpaperService : WallpaperService() {
             setTouchEventsEnabled(true)
         }
 
-        override fun onCreate(surfaceHolder: SurfaceHolder) {
-            super.onCreate(surfaceHolder)
-            // Request a full-display buffer; default OEM surface can be ~720p or smaller.
-            // (setFixedSizeAllowed is framework/hidden — not in the public SDK stubs.)
-            displayUtils.requestFullDisplaySurface(surfaceHolder)
-        }
-
         private val screenOffReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 if (intent.action == Intent.ACTION_SCREEN_OFF && isVideo) {
@@ -124,8 +117,6 @@ class KLVWallpaperService : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            // Re-assert full-display size in case OEM reset the buffer after create.
-            displayUtils.requestFullDisplaySurface(holder)
             registerReceiver(
                 screenOffReceiver,
                 IntentFilter(Intent.ACTION_SCREEN_OFF),
