@@ -121,6 +121,8 @@ class SettingsPreferences @Inject constructor(
         val SCHEDULE_ENABLED = booleanPreferencesKey("schedule_enabled")
         val SCHEDULE_ACTIVE_GROUP_ID = stringPreferencesKey("schedule_active_group_id")
         val SCHEDULE_GROUPS_JSON = stringPreferencesKey("schedule_groups_json")
+        // Video sharpness: power | standard | quality
+        val VIDEO_SHARPNESS_MODE = stringPreferencesKey("video_sharpness_mode")
     }
 
     // Raw flows — distinctUntilChanged so writes to unrelated keys don't trigger re-emission
@@ -170,6 +172,10 @@ class SettingsPreferences @Inject constructor(
     val scheduleEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.SCHEDULE_ENABLED] ?: false }.distinctUntilChanged()
     val scheduleActiveGroupId: Flow<String?> = context.dataStore.data.map { it[Keys.SCHEDULE_ACTIVE_GROUP_ID] }.distinctUntilChanged()
     val scheduleGroupsJson: Flow<String> = context.dataStore.data.map { it[Keys.SCHEDULE_GROUPS_JSON] ?: "[]" }.distinctUntilChanged()
+    /** power | standard | quality — default standard. */
+    val videoSharpnessMode: Flow<String> = context.dataStore.data
+        .map { it[Keys.VIDEO_SHARPNESS_MODE] ?: "standard" }
+        .distinctUntilChanged()
     val popupLayout: Flow<String> = context.dataStore.data.map { it[Keys.POPUP_LAYOUT] ?: "list" }.distinctUntilChanged()
     val popupGridColumns: Flow<Int> = context.dataStore.data.map { it[Keys.POPUP_GRID_COLUMNS] ?: 3 }.distinctUntilChanged()
     val popupWidthFraction: Flow<Float> = context.dataStore.data.map { it[Keys.POPUP_WIDTH_FRACTION] ?: 0.92f }.distinctUntilChanged()
@@ -698,6 +704,10 @@ class SettingsPreferences @Inject constructor(
             if (id.isNullOrBlank()) it.remove(Keys.SCHEDULE_ACTIVE_GROUP_ID)
             else it[Keys.SCHEDULE_ACTIVE_GROUP_ID] = id
         }
+    }
+
+    suspend fun setVideoSharpnessMode(value: String) {
+        context.dataStore.edit { it[Keys.VIDEO_SHARPNESS_MODE] = value }
     }
 
     suspend fun setScheduleGroupsJson(json: String) {

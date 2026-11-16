@@ -15,6 +15,7 @@ import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
 import androidx.media3.common.C
@@ -23,13 +24,16 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
+import com.klvw.wallpaper.data.model.VideoSharpnessMode
 import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.util.DisplayUtils
+import com.klvw.wallpaper.util.SharpnessLogStore
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
+import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -46,8 +50,12 @@ import kotlinx.coroutines.withContext
  */
 class VideoRenderer(
     private val context: Context,
-    private val displayUtils: DisplayUtils
+    private val displayUtils: DisplayUtils,
+    private val sharpnessLogStore: SharpnessLogStore? = null
 ) {
+    companion object {
+        private const val TAG = "KLVW-Sharpness"
+    }
     private val generation = AtomicInteger(0)
 
     @Volatile private var player: ExoPlayer? = null
@@ -78,6 +86,7 @@ class VideoRenderer(
     private val frameAvailable = AtomicBoolean(false)
 
     private var scaleMode: WallpaperScaleMode = WallpaperScaleMode.FILL
+    private var sharpnessMode: VideoSharpnessMode = VideoSharpnessMode.STANDARD
     private var rotateMismatchEnabled = false
     private var rotateMismatchCw = true
     private var videoW = 0
@@ -136,7 +145,8 @@ class VideoRenderer(
         holder: SurfaceHolder,
         scaleMode: WallpaperScaleMode = WallpaperScaleMode.FILL,
         rotateMismatchEnabled: Boolean = false,
-        rotateMismatchCw: Boolean = true
+        rotateMismatchCw: Boolean = true,
+        sharpnessMode: VideoSharpnessMode = VideoSharpnessMode.STANDARD
     ) {
         release()
         intentionalRelease = false
@@ -146,13 +156,16 @@ class VideoRenderer(
         this.scaleMode = scaleMode
         this.rotateMismatchEnabled = rotateMismatchEnabled
         this.rotateMismatchCw = rotateMismatchCw
+        this.sharpnessMode = sharpnessMode
 
         val metrics = displayUtils.getScreenMetrics()
         val frame = holder.surfaceFrame
         // Must match the real wallpaper Surface buffer (EGL window size).
         // Do not invent a larger viewport — that desyncs from the buffer and can go black.
-        screenW = if (frame.width() > 0) frame.width() else metrics.widthPx
-        screenH = if (frame.height() > 0) frame.height() else metrics.heightPx
+        val frameW = if (frame.width() > 0) frame.width() else metrics.widthPx
+        val frameH = if (frame.height() > 0) frame.height() else metrics.heightPx
+        screenW = frameW
+        screenH = frameH
         val probed = probeDisplaySize(uri)
         videoW = probed.first
         videoH = probed.second
@@ -171,17 +184,41 @@ class VideoRenderer(
                 setupEgl(holder)
                 setupGl()
                 val st = SurfaceTexture(tex[0]).also { surfaceTexture = it }
-                // Prefer full source pixels for the decoder→OES buffer (not the possibly-small
-                // wallpaper Surface). Fall back to screen size if metadata is missing.
-                val bufW = when {
-                    videoW > 0 -> videoW
-                    else -> screenW
-                }.coerceAtLeast(1)
-                val bufH = when {
-                    videoH > 0 -> videoH
-                    else -> screenH
-                }.coerceAtLeast(1)
+                val (bufW, bufH) = resolveOesBufferSize(
+                    sharpnessMode, videoW, videoH, screenW, screenH,
+                    metrics.widthPx, metrics.heightPx
+                )
                 st.setDefaultBufferSize(bufW, bufH)
+                val summary =
+                    "display=${metrics.widthPx}x${metrics.heightPx} " +
+                        "surfaceFrame=${frameW}x${frameH} " +
+                        "egl=${screenW}x${screenH} " +
+                        "video=${videoW}x${videoH} " +
+                        "oesBuf=${bufW}x${bufH} " +
+                        "mode=${sharpnessMode.prefValue}"
+                Log.i(TAG, summary)
+                val verdict = when {
+                    screenW >= metrics.widthPx * 0.9f && screenH >= metrics.heightPx * 0.9f ->
+                        "EGL 接近全屏，清晰度上限较好"
+                    bufW >= max(videoW, 1) && videoW > screenW ->
+                        "解码按片源分辨率，再缩放到偏小 Surface（清晰度受 Surface 限制）"
+                    sharpnessMode == VideoSharpnessMode.POWER ->
+                        "省电模式：OES 跟随 Surface，可能更糊、更省带宽"
+                    else ->
+                        "Wallpaper Surface 偏小；当前安全方案无法强制放大缓冲"
+                }
+                sharpnessLogStore?.append(
+                    title = "视频渲染启动",
+                    mode = sharpnessMode.labelZh,
+                    lines = listOf(
+                        "屏幕 ${metrics.widthPx}×${metrics.heightPx}",
+                        "surfaceFrame ${frameW}×${frameH}",
+                        "EGL ${screenW}×${screenH}",
+                        "片源 ${videoW}×${videoH}",
+                        "OES 缓冲 ${bufW}×${bufH}",
+                        verdict
+                    )
+                )
                 st.setOnFrameAvailableListener({
                     frameAvailable.set(true)
                     handler.post { if (gen == generation.get()) drainAndDraw() }
@@ -200,9 +237,38 @@ class VideoRenderer(
                 try {
                     releaseGlOnly()
                     startSurfaceHolderFallback(uri, holder, scaleMode, gen, startPositionMs)
+                    sharpnessLogStore?.append(
+                        title = "GL 失败，已回退 SurfaceHolder",
+                        mode = sharpnessMode.labelZh,
+                        lines = listOf("uri=$uri")
+                    )
                 } catch (_: Throwable) {
                     releaseGlOnly()
                 }
+            }
+        }
+    }
+
+    private fun resolveOesBufferSize(
+        mode: VideoSharpnessMode,
+        vw: Int,
+        vh: Int,
+        sw: Int,
+        sh: Int,
+        dw: Int,
+        dh: Int
+    ): Pair<Int, Int> {
+        val surfaceW = sw.coerceAtLeast(1)
+        val surfaceH = sh.coerceAtLeast(1)
+        val videoOk = vw > 0 && vh > 0
+        return when (mode) {
+            VideoSharpnessMode.POWER -> surfaceW to surfaceH
+            VideoSharpnessMode.STANDARD -> {
+                if (videoOk) vw to vh else surfaceW to surfaceH
+            }
+            VideoSharpnessMode.QUALITY -> {
+                if (videoOk) max(vw, dw) to max(vh, dh)
+                else max(surfaceW, dw) to max(surfaceH, dh)
             }
         }
     }
@@ -503,9 +569,10 @@ class VideoRenderer(
               vT = (uST * vec4(aT, 0.0, 1.0)).xy;
             }
         """.trimIndent()
+        val precision = if (sharpnessMode == VideoSharpnessMode.POWER) "mediump" else "highp"
         val fs = """
             #extension GL_OES_EGL_image_external : require
-            precision highp float;
+            precision $precision float;
             uniform samplerExternalOES uS;
             varying vec2 vT;
             void main() {

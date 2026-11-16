@@ -46,6 +46,7 @@ import com.klvw.wallpaper.tile.PujieWatchFacePreset
 import com.klvw.wallpaper.wear.WatchPopupItem
 import com.klvw.wallpaper.wear.toWatchJsonString
 import com.klvw.wallpaper.tile.PujieWatchFacePreset.Companion.toJsonString
+import com.klvw.wallpaper.data.model.VideoSharpnessMode
 import com.klvw.wallpaper.ui.theme.SurfaceGlass
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 
@@ -53,6 +54,14 @@ import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showSharpnessLogs by remember { mutableStateOf(false) }
+
+    if (showSharpnessLogs) {
+        SharpnessLogDialog(
+            viewModel = viewModel,
+            onDismiss = { showSharpnessLogs = false }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -87,7 +96,10 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
         }
 
         SettingsSection(title = "壁纸显示") {
-            WallpaperDisplaySection(viewModel = viewModel)
+            WallpaperDisplaySection(
+                viewModel = viewModel,
+                onOpenSharpnessLogs = { showSharpnessLogs = true }
+            )
         }
 
         SettingsSection(title = "壁纸手势") {
@@ -1388,7 +1400,10 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun WallpaperDisplaySection(viewModel: WallpaperViewModel) {
+private fun WallpaperDisplaySection(
+    viewModel: WallpaperViewModel,
+    onOpenSharpnessLogs: () -> Unit
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Column(
         modifier = Modifier
@@ -1417,6 +1432,31 @@ private fun WallpaperDisplaySection(viewModel: WallpaperViewModel) {
                         label = { Text(label) }
                     )
                 }
+            }
+        }
+
+        HorizontalDivider(thickness = 0.5.dp)
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("视频清晰度", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "省电：跟随系统小缓冲；标准：按片源解码；高清：尽量更大解码缓冲。均不强制 setFixedSize。切换后需重新应用或等壁纸重载。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                VideoSharpnessMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = state.videoSharpnessMode == mode.prefValue,
+                        onClick = { viewModel.setVideoSharpnessMode(mode.prefValue) },
+                        label = { Text(mode.labelZh) }
+                    )
+                }
+            }
+            TextButton(onClick = onOpenSharpnessLogs) {
+                Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("清晰度诊断日志")
             }
         }
 

@@ -12,12 +12,14 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
+import com.klvw.wallpaper.data.model.VideoSharpnessMode
 import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.service.renderer.EGLImageRenderer
 import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
 import com.klvw.wallpaper.service.renderer.VideoRenderer
 import com.klvw.wallpaper.util.DisplayUtils
+import com.klvw.wallpaper.util.SharpnessLogStore
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,12 +31,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-private data class LockCollectQuad(
+private data class LockCollectParams(
     val uri: String?,
     val isVideo: Boolean,
     val scale: String,
     val rotateEn: Boolean,
-    val rotateCw: Boolean
+    val rotateCw: Boolean,
+    val sharpness: String
 )
 
 @AndroidEntryPoint
@@ -42,6 +45,7 @@ class KLVWallpaperServiceLock : WallpaperService() {
 
     @Inject lateinit var prefs: SettingsPreferences
     @Inject lateinit var displayUtils: DisplayUtils
+    @Inject lateinit var sharpnessLogStore: SharpnessLogStore
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -105,7 +109,6 @@ class KLVWallpaperServiceLock : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            displayUtils.suggestDesiredWallpaperSize()
             registerReceiver(
                 screenOffReceiver,
                 IntentFilter(Intent.ACTION_SCREEN_OFF),
@@ -183,9 +186,10 @@ class KLVWallpaperServiceLock : WallpaperService() {
                     prefs.lockWallpaperState,
                     prefs.wallpaperScaleMode,
                     prefs.rotateMismatchEnabled,
-                    prefs.rotateMismatchCw
-                ) { state, scale, rotateEn, rotateCw ->
-                    LockCollectQuad(state.first, state.second, scale, rotateEn, rotateCw)
+                    prefs.rotateMismatchCw,
+                    prefs.videoSharpnessMode
+                ) { state, scale, rotateEn, rotateCw, sharpness ->
+                    LockCollectParams(state.first, state.second, scale, rotateEn, rotateCw, sharpness)
                 }.collect { q ->
                     try {
                         resizeJob?.cancel()
@@ -194,10 +198,14 @@ class KLVWallpaperServiceLock : WallpaperService() {
                         val uri = q.uri ?: return@collect
                         isVideo = q.isVideo
                         val mode = WallpaperScaleMode.fromPref(q.scale)
+                        val sharpness = VideoSharpnessMode.fromPref(q.sharpness)
                         lastUri = uri
                         lastScaleMode = mode
                         lastRotateEn = q.rotateEn
                         lastRotateCw = q.rotateCw
+                        if (sharpness != VideoSharpnessMode.POWER) {
+                            displayUtils.suggestDesiredWallpaperSize()
+                        }
                         val frame = holder.surfaceFrame
                         val sw = if (frame.width() > 0) frame.width() else lastSurfaceW
                         val sh = if (frame.height() > 0) frame.height() else lastSurfaceH
@@ -206,9 +214,11 @@ class KLVWallpaperServiceLock : WallpaperService() {
                             lastSurfaceH = sh
                         }
                         if (q.isVideo) {
-                            videoRenderer = VideoRenderer(applicationContext, displayUtils)
+                            videoRenderer = VideoRenderer(
+                                applicationContext, displayUtils, sharpnessLogStore
+                            )
                             videoRenderer!!.load(
-                                Uri.parse(uri), holder, mode, q.rotateEn, q.rotateCw
+                                Uri.parse(uri), holder, mode, q.rotateEn, q.rotateCw, sharpness
                             )
                         } else {
                             imageRenderer = EGLImageRenderer(applicationContext, displayUtils)

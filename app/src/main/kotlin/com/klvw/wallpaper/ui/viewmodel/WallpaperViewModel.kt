@@ -14,6 +14,7 @@ import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.schedule.ScheduleManager
+import com.klvw.wallpaper.util.SharpnessLogStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +41,7 @@ data class WallpaperUiState(
     val wallpaperScaleMode: String = "fill",
     val rotateMismatchEnabled: Boolean = false,
     val rotateMismatchCw: Boolean = true,
+    val videoSharpnessMode: String = "standard",
     val doubleTapEnabled: Boolean = false,
     val forceIconColor: String = "auto",
     val tileRandomImageTarget: String = "both",
@@ -68,8 +70,11 @@ class WallpaperViewModel @Inject constructor(
     private val wallpaperRepository: WallpaperRepository,
     private val staticImageRepository: StaticImageRepository,
     private val prefs: SettingsPreferences,
-    private val scheduleManager: ScheduleManager
+    private val scheduleManager: ScheduleManager,
+    private val sharpnessLogStore: SharpnessLogStore
 ) : ViewModel() {
+
+    val sharpnessLogs = sharpnessLogStore.entries
 
     private val _state = MutableStateFlow(WallpaperUiState())
     val state: StateFlow<WallpaperUiState> = _state.asStateFlow()
@@ -132,6 +137,12 @@ class WallpaperViewModel @Inject constructor(
                         rotateMismatchCw = rotateCw
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            prefs.videoSharpnessMode.collect { sharpness ->
+                _state.update { it.copy(videoSharpnessMode = sharpness) }
             }
         }
 
@@ -421,6 +432,14 @@ class WallpaperViewModel @Inject constructor(
 
     fun setRotateMismatchCw(clockwise: Boolean) {
         viewModelScope.launch { prefs.setRotateMismatchCw(clockwise) }
+    }
+
+    fun setVideoSharpnessMode(value: String) {
+        viewModelScope.launch { prefs.setVideoSharpnessMode(value) }
+    }
+
+    fun clearSharpnessLogs() {
+        sharpnessLogStore.clear()
     }
 
     fun setDoubleTapEnabled(enabled: Boolean) {

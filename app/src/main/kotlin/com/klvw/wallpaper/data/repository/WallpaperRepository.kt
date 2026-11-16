@@ -3,6 +3,7 @@ package com.klvw.wallpaper.data.repository
 import android.app.WallpaperManager
 import android.content.Context
 import com.klvw.wallpaper.data.model.FolderType
+import com.klvw.wallpaper.data.model.VideoSharpnessMode
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.model.WallpaperTarget
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
@@ -24,7 +25,10 @@ class WallpaperRepository @Inject constructor(
 
     suspend fun setWallpaper(item: WallpaperItem, target: WallpaperTarget) = withContext(Dispatchers.IO) {
         if (!prefs.appEnabled.first()) return@withContext
-        displayUtils.suggestDesiredWallpaperSize()
+        val sharpness = VideoSharpnessMode.fromPref(prefs.videoSharpnessMode.first())
+        if (sharpness != VideoSharpnessMode.POWER) {
+            displayUtils.suggestDesiredWallpaperSize()
+        }
         val isVideo = item.type == FolderType.VIDEO
         when (target) {
             WallpaperTarget.HOME -> {
