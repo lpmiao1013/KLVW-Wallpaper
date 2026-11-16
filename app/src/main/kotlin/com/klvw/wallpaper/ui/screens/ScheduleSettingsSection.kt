@@ -343,9 +343,24 @@ private fun ScheduleGroupEditorDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
+                        val homeOrder = rules
+                            .filter { it.target == WallpaperTarget.HOME }
+                            .sortedWith(compareBy({ it.startMinute }, { it.endMinute }, { it.id }))
+                            .mapIndexed { i, r -> r.id to i }
+                            .toMap()
+                        val lockOrder = rules
+                            .filter { it.target == WallpaperTarget.LOCK }
+                            .sortedWith(compareBy({ it.startMinute }, { it.endMinute }, { it.id }))
+                            .mapIndexed { i, r -> r.id to i }
+                            .toMap()
                         rules.forEach { rule ->
+                            val colorIndex = when (rule.target) {
+                                WallpaperTarget.LOCK -> lockOrder[rule.id] ?: 0
+                                else -> homeOrder[rule.id] ?: 0
+                            }
                             RuleRow(
                                 rule = rule,
+                                colorIndex = colorIndex,
                                 onEdit = { editingRule = rule },
                                 onDelete = { rules = rules.filter { it.id != rule.id } }
                             )
@@ -379,6 +394,25 @@ private fun ScheduleGroupEditorDialog(
     }
 }
 
+/** Distinct hues so adjacent same-type rules stay visually separable on the day bar. */
+private val TimelineRuleColors = listOf(
+    Color(0xFF5B8DEF),
+    Color(0xFF34C759),
+    Color(0xFFFF9500),
+    Color(0xFFFF3B30),
+    Color(0xFFAF52DE),
+    Color(0xFF00C7BE),
+    Color(0xFFFF2D55),
+    Color(0xFF5856D6),
+    Color(0xFFFFCC00),
+    Color(0xFF64D2FF),
+    Color(0xFFAC8E68),
+    Color(0xFF30B0C7)
+)
+
+private fun timelineColorFor(index: Int): Color =
+    TimelineRuleColors[index.mod(TimelineRuleColors.size)]
+
 @Composable
 private fun DayTimeline(
     rules: List<ScheduleRule>,
@@ -386,12 +420,15 @@ private fun DayTimeline(
     modifier: Modifier = Modifier
 ) {
     val label = if (target == WallpaperTarget.LOCK) "锁屏" else "桌面"
-    val targetRules = remember(rules, target) { rules.filter { it.target == target } }
+    // Stable order by start so each rule gets a consistent palette index.
+    val targetRules = remember(rules, target) {
+        rules.filter { it.target == target }
+            .sortedWith(compareBy({ it.startMinute }, { it.endMinute }, { it.id }))
+    }
     val cover = remember(rules, target) { ScheduleMath.coverage(rules, target) }
     val hasGap = remember(cover) { cover.any { !it } }
-    val primary = MaterialTheme.colorScheme.primary
-    val tertiary = MaterialTheme.colorScheme.tertiary
     val track = MaterialTheme.colorScheme.surfaceVariant
+    val gapLine = MaterialTheme.colorScheme.background
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -399,7 +436,10 @@ private fun DayTimeline(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(
+                "$label · ${targetRules.size} 段",
+                style = MaterialTheme.typography.labelMedium
+            )
             Text(
                 if (targetRules.isEmpty()) "未配置"
                 else if (hasGap) "有空隙"
@@ -414,15 +454,15 @@ private fun DayTimeline(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(18.dp)
+                .height(22.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(track)
         ) {
             val total = maxWidth
             val day = ScheduleMath.MINUTES_PER_DAY.toFloat()
             val segments = buildList {
-                targetRules.forEach { rule ->
-                    val color = if (rule.media == FolderType.VIDEO) tertiary else primary
+                targetRules.forEachIndexed { index, rule ->
+                    val color = timelineColorFor(index)
                     if (rule.startMinute <= rule.endMinute) {
                         add(Triple(rule.startMinute, rule.endMinute, color))
                     } else {
@@ -437,10 +477,20 @@ private fun DayTimeline(
                 Box(
                     Modifier
                         .offset(x = x)
-                        .width(w.coerceAtLeast(1.dp))
+                        .width(w.coerceAtLeast(2.dp))
                         .fillMaxHeight()
-                        .background(color.copy(alpha = 0.85f))
+                        .background(color)
                 )
+                // Hairline at the left edge so abutting segments stay distinct.
+                if (start > 0) {
+                    Box(
+                        Modifier
+                            .offset(x = x)
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(gapLine)
+                    )
+                }
             }
         }
         Row(
@@ -461,6 +511,7 @@ private fun DayTimeline(
 @Composable
 private fun RuleRow(
     rule: ScheduleRule,
+    colorIndex: Int,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -472,6 +523,13 @@ private fun RuleRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .padding(end = 10.dp)
+                .size(width = 4.dp, height = 28.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(timelineColorFor(colorIndex))
+        )
         Column(Modifier.weight(1f)) {
             Text("$target · $media · $time", style = MaterialTheme.typography.bodyMedium)
             Text(folder, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
