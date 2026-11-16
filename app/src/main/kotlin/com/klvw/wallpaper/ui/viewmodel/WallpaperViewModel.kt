@@ -447,7 +447,15 @@ class WallpaperViewModel @Inject constructor(
         viewModelScope.launch { folderRepository.addAerFolder(aerFolder, type) }
     }
 
-    private fun loadPreviewItems(clearFirst: Boolean = false) {
+    /** Manual rescan of the current folder(s); use after the user added files on disk. */
+    fun refreshPreviewList() {
+        val tab = _state.value.mediaTab
+        if (tab == MediaTab.STATIC) return
+        if (_state.value.isLoadingPreview) return
+        loadPreviewItems(clearFirst = true, forceRefresh = true)
+    }
+
+    private fun loadPreviewItems(clearFirst: Boolean = false, forceRefresh: Boolean = false) {
         val gen = previewLoadGeneration.incrementAndGet()
         viewModelScope.launch(Dispatchers.IO) {
             if (clearFirst) {
@@ -460,18 +468,26 @@ class WallpaperViewModel @Inject constructor(
                 MediaTab.STATIC -> s.staticImages
                 MediaTab.IMAGE -> when {
                     selUri == null ->
-                        s.imageFolders.flatMap { folderRepository.getItemsFromFolder(it.uri, FolderType.IMAGE) }
+                        s.imageFolders.flatMap {
+                            folderRepository.getItemsFromFolder(it.uri, FolderType.IMAGE, forceRefresh)
+                        }
                     else ->
                         s.imageFolders.find { it.uri == selUri }
-                            ?.let { folderRepository.getItemsFromFolder(it.uri, FolderType.IMAGE) }
+                            ?.let {
+                                folderRepository.getItemsFromFolder(it.uri, FolderType.IMAGE, forceRefresh)
+                            }
                             ?: emptyList()
                 }
                 MediaTab.VIDEO -> when {
                     selUri == null ->
-                        s.videoFolders.flatMap { folderRepository.getItemsFromFolder(it.uri, FolderType.VIDEO) }
+                        s.videoFolders.flatMap {
+                            folderRepository.getItemsFromFolder(it.uri, FolderType.VIDEO, forceRefresh)
+                        }
                     else ->
                         s.videoFolders.find { it.uri == selUri }
-                            ?.let { folderRepository.getItemsFromFolder(it.uri, FolderType.VIDEO) }
+                            ?.let {
+                                folderRepository.getItemsFromFolder(it.uri, FolderType.VIDEO, forceRefresh)
+                            }
                             ?: emptyList()
                 }
             }

@@ -157,6 +157,8 @@ class VideoRenderer(
         videoW = probed.first
         videoH = probed.second
         val startPositionMs = VideoPlaybackPositions.get(uri.toString())
+        // User pin consumed once playback starts from it; pause may then advance the node.
+        VideoPlaybackPositions.markUserStartApplied(uri.toString())
 
         val thread = HandlerThread("KLVW-VideoGL").also { it.start() }
         glThread = thread
@@ -233,7 +235,7 @@ class VideoRenderer(
         try {
             val pos = p.currentPosition
             val dur = p.duration
-            VideoPlaybackPositions.set(uriKey, pos, if (dur == C.TIME_UNSET) 0L else dur)
+            VideoPlaybackPositions.setFromRenderer(uriKey, pos, if (dur == C.TIME_UNSET) 0L else dur)
         } catch (_: Exception) {
         }
     }
@@ -261,6 +263,18 @@ class VideoRenderer(
         } catch (_: Exception) {}
     }
     fun resume() = postToPlayerThread { try { player?.play() } catch (_: Exception) {} }
+
+    /** Seek live wallpaper to a user-pinned start (same URI already playing). */
+    fun seekToUserStart(positionMs: Long) {
+        val uriKey = currentUri?.toString() ?: return
+        postToPlayerThread {
+            try {
+                player?.seekTo(positionMs.coerceAtLeast(0L))
+                VideoPlaybackPositions.markUserStartApplied(uriKey)
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     /**
      * Viewport / OEM surface buffer resize (e.g. after a landscape app exits).

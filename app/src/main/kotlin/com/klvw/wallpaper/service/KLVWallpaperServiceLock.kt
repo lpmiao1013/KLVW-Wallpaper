@@ -15,6 +15,7 @@ import android.view.SurfaceHolder
 import com.klvw.wallpaper.data.model.WallpaperScaleMode
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.service.renderer.EGLImageRenderer
+import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
 import com.klvw.wallpaper.service.renderer.VideoRenderer
 import com.klvw.wallpaper.util.DisplayUtils
 import dagger.hilt.android.AndroidEntryPoint
@@ -80,6 +81,17 @@ class KLVWallpaperServiceLock : WallpaperService() {
             }
         }
 
+        private val userStartReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                if (intent.action != VideoPlaybackPositions.ACTION_USER_START) return
+                val uri = intent.getStringExtra(VideoPlaybackPositions.EXTRA_URI) ?: return
+                if (uri != lastUri || !isVideo) return
+                val pos = intent.getLongExtra(VideoPlaybackPositions.EXTRA_POSITION_MS, -1L)
+                if (pos < 0L) return
+                videoRenderer?.seekToUserStart(pos)
+            }
+        }
+
         private val syntheticWhiteColors by lazy {
             Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
                 .also { it.eraseColor(Color.WHITE) }
@@ -96,6 +108,11 @@ class KLVWallpaperServiceLock : WallpaperService() {
             registerReceiver(
                 screenOffReceiver,
                 IntentFilter(Intent.ACTION_SCREEN_OFF),
+                Context.RECEIVER_NOT_EXPORTED
+            )
+            registerReceiver(
+                userStartReceiver,
+                IntentFilter(VideoPlaybackPositions.ACTION_USER_START),
                 Context.RECEIVER_NOT_EXPORTED
             )
             // Seed with persisted value so the very first onComputeColors() call is correct.
@@ -246,6 +263,7 @@ class KLVWallpaperServiceLock : WallpaperService() {
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             super.onSurfaceDestroyed(holder)
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
+            try { unregisterReceiver(userStartReceiver) } catch (_: Exception) {}
             collectorJob?.cancel()
             collectorJob = null
             resizeJob?.cancel()
@@ -259,6 +277,7 @@ class KLVWallpaperServiceLock : WallpaperService() {
         override fun onDestroy() {
             super.onDestroy()
             try { unregisterReceiver(screenOffReceiver) } catch (_: Exception) {}
+            try { unregisterReceiver(userStartReceiver) } catch (_: Exception) {}
             collectorJob?.cancel()
             collectorJob = null
             resizeJob?.cancel()

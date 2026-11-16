@@ -60,6 +60,43 @@ object ScheduleMath {
         return windowsOverlap(a.startMinute, a.endMinute, b.startMinute, b.endMinute)
     }
 
+    data class MinuteWindow(val startMinute: Int, val endMinute: Int)
+
+    /**
+     * First contiguous uncovered inclusive window for [target], optionally ignoring [excludeRuleId]
+     * (the rule currently being edited). Null when that target is already fully covered.
+     */
+    fun firstUncoveredWindow(
+        rules: List<ScheduleRule>,
+        target: WallpaperTarget,
+        excludeRuleId: String? = null
+    ): MinuteWindow? {
+        val cover = BooleanArray(MINUTES_PER_DAY)
+        rules.asSequence()
+            .filter { it.target == target && it.id != excludeRuleId }
+            .forEach { rule ->
+                for (m in 0 until MINUTES_PER_DAY) {
+                    if (ruleContains(rule, m)) cover[m] = true
+                }
+            }
+        val start = cover.indexOfFirst { !it }
+        if (start < 0) return null
+        var end = start
+        while (end + 1 < MINUTES_PER_DAY && !cover[end + 1]) end++
+        return MinuteWindow(start, end)
+    }
+
+    /** Coverage map for timeline UI: true = covered. */
+    fun coverage(rules: List<ScheduleRule>, target: WallpaperTarget): BooleanArray {
+        val cover = BooleanArray(MINUTES_PER_DAY)
+        rules.filter { it.target == target }.forEach { rule ->
+            for (m in 0 until MINUTES_PER_DAY) {
+                if (ruleContains(rule, m)) cover[m] = true
+            }
+        }
+        return cover
+    }
+
     /**
      * Validates one group before save / enable.
      * - Every rule needs a non-blank folder
