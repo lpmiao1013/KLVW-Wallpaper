@@ -56,20 +56,11 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSharpnessLogs by remember { mutableStateOf(false) }
-    var showHiddenFoldersPanel by remember { mutableStateOf(false) }
-    var aboutTapCount by remember { mutableStateOf(0) }
-    var aboutTapWindowMs by remember { mutableStateOf(0L) }
 
     if (showSharpnessLogs) {
         SharpnessLogDialog(
             viewModel = viewModel,
             onDismiss = { showSharpnessLogs = false }
-        )
-    }
-    if (showHiddenFoldersPanel) {
-        ShowHiddenFoldersDialog(
-            viewModel = viewModel,
-            onDismiss = { showHiddenFoldersPanel = false }
         )
     }
 
@@ -116,7 +107,7 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             SettingToggle(
                 icon = Icons.Default.TouchApp,
                 title = "双击桌面切换壁纸",
-                subtitle = "需已启用 KLVW 动态壁纸；按当前桌面图/视频类型，从对应默认文件夹轮换。部分桌面可能拦截触摸。",
+                subtitle = "需已启用 KLVW 动态壁纸；按优先级取文件夹（预设→时段→当前指定→默认）。部分桌面可能拦截触摸。",
                 checked = state.doubleTapEnabled,
                 onCheckedChange = { viewModel.setDoubleTapEnabled(it) }
             )
@@ -152,6 +143,13 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
 
         SettingsSection(title = "时段方案") {
             ScheduleSettingsSection(viewModel = viewModel)
+        }
+
+        // Visible only while hide-mode is OFF; when ON, only the QS tile can turn it off.
+        if (!state.folderHideMode) {
+            SettingsSection(title = "文件夹隐藏") {
+                FolderHideSettingsSection(viewModel = viewModel)
+            }
         }
 
         // Less-used: status bar / popup menu / tile / watch faces — above watch section
@@ -215,17 +213,6 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(SurfaceGlass)
-                    .clickable {
-                        val now = System.currentTimeMillis()
-                        val next = if (now - aboutTapWindowMs > 2500L) 1 else aboutTapCount + 1
-                        aboutTapWindowMs = now
-                        aboutTapCount = next
-                        if (next >= 8) {
-                            aboutTapCount = 0
-                            showHiddenFoldersPanel = true
-                            Toast.makeText(context, "已打开隐藏文件夹显示设置", Toast.LENGTH_SHORT).show()
-                        }
-                    }
                     .padding(16.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2054,68 +2041,61 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
 }
 
 @Composable
-private fun ShowHiddenFoldersDialog(
-    viewModel: WallpaperViewModel,
-    onDismiss: () -> Unit
-) {
+private fun FolderHideSettingsSection(viewModel: WallpaperViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("显示隐藏文件夹") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "隐藏模式由「文件夹隐藏」磁贴控制。开启下方开关后，即使处于隐藏模式也会在列表中显示带隐私标记的文件夹。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("显示隐藏文件夹", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            if (state.folderHideMode) "当前隐藏模式：开" else "当前隐藏模式：关",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = state.showHiddenFolders,
-                        onCheckedChange = { viewModel.setShowHiddenFolders(it) }
-                    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "开启后，带隐私标记的文件夹会从列表中消失。开启后本区会隐藏，只能用磁贴关闭。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+        SettingToggle(
+            icon = Icons.Default.VisibilityOff,
+            title = "启用文件夹隐藏",
+            subtitle = "与快捷设置磁贴同步",
+            checked = state.folderHideMode,
+            onCheckedChange = { viewModel.setFolderHideMode(it) }
+        )
+        HorizontalDivider(thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 4.dp))
+        SettingToggle(
+            icon = Icons.Default.Visibility,
+            title = "显示已标记文件夹",
+            subtitle = "隐藏模式关闭时预览标记列表仍可用",
+            checked = state.showHiddenFolders,
+            onCheckedChange = { viewModel.setShowHiddenFolders(it) }
+        )
+        OutlinedButton(
+            onClick = {
+                requestAddFolderHideTile(context) { msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 }
-                OutlinedButton(
-                    onClick = {
-                        requestAddFolderHideTile(context) { msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("添加「文件夹隐藏」磁贴")
-                }
-                if (state.markedFolders.isNotEmpty()) {
-                    Text(
-                        "已标记 ${state.markedFolders.size} 个文件夹",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    state.markedFolders.forEach { folder ->
-                        Text(
-                            "· ${folder.displayName}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+        ) {
+            Icon(Icons.Default.AddToHomeScreen, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("添加「文件夹隐藏」磁贴")
         }
-    )
+        if (state.markedFolders.isNotEmpty()) {
+            Text(
+                "已标记 ${state.markedFolders.size} 个",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            state.markedFolders.forEach { folder ->
+                Text(
+                    "· ${folder.displayName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
+        }
+    }
 }
 
 private fun requestAddFolderHideTile(context: android.content.Context, onMsg: (String) -> Unit) {

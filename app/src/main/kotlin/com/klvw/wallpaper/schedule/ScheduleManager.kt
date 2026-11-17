@@ -96,18 +96,30 @@ class ScheduleManager @Inject constructor(
     }
 
     /**
-     * Folder for timers / double-tap / picker.
-     * Preset folder source (while active) → that folder when media matches.
-     * Schedule on (and preset off) → current window folder only when [type] matches; else null.
-     * Otherwise → default folder for [target]+[type].
+     * Folder for timers / double-tap / unlock / picker fallback.
+     * Priority (highest first):
+     * 1. Preset folder source (while preset active, media must match)
+     * 2. Current schedule window (schedule on and preset off, media must match)
+     * 3. Tabbar active folder for that media type
+     * 4. Per-screen default folder
      */
     suspend fun resolveFolderUri(target: WallpaperTarget, type: FolderType): String? {
         if (target != WallpaperTarget.HOME && target != WallpaperTarget.LOCK) return null
-        presetManager.get().resolveFolderUri(target, type)?.let { return it }
+        // Preset owns the stack while active — never fall through to schedule/active/default
+        // (file-source presets correctly return null = no folder to cycle).
+        if (presetManager.get().isActive()) {
+            return presetManager.get().resolveFolderUri(target, type)
+        }
         if (isEnabled()) {
             val rule = currentRule(target) ?: return null
             return if (rule.media == type) rule.folderUri else null
         }
+        val active = when (type) {
+            FolderType.IMAGE -> prefs.activeImageFolderUri.first()
+            FolderType.VIDEO -> prefs.activeVideoFolderUri.first()
+            FolderType.STATIC -> null
+        }
+        if (!active.isNullOrBlank()) return active
         return defaultFolder(target, type)
     }
 
@@ -195,7 +207,8 @@ class ScheduleManager @Inject constructor(
                 else -> false
             }
             val type = if (isVideo) FolderType.VIDEO else FolderType.IMAGE
-            val uri = defaultFolder(target, type) ?: continue
+            // Same stack as timers/double-tap: active tabbar folder, else per-screen default.
+            val uri = resolveFolderUri(target, type) ?: continue
             pickAndSet(
                 ScheduleRule(
                     target = target,

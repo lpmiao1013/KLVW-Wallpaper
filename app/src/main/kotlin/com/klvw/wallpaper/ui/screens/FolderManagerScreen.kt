@@ -113,7 +113,7 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
         }
 
         Text(
-            "眼睛图标：打/取消隐私标记。用「文件夹隐藏」磁贴一键隐藏已标记项；关于连点 8 次可打开「显示隐藏」。",
+            "眼睛图标：打/取消隐私标记。用设置或「文件夹隐藏」磁贴控制隐藏；开启后设置页该项会隐藏，只能用磁贴关闭。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -168,6 +168,7 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
         }
 
         if (state.imageFolders.isNotEmpty() || state.videoFolders.isNotEmpty()) {
+            val defaultsFrozen = state.presetEnabled || state.scheduleEnabled
             DefaultFoldersSection(
                 imageFolders = state.imageFolders,
                 videoFolders = state.videoFolders,
@@ -175,7 +176,14 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
                 defaultLockImageUri = state.defaultLockImageFolderUri,
                 defaultHomeVideoUri = state.defaultHomeVideoFolderUri,
                 defaultLockVideoUri = state.defaultLockVideoFolderUri,
-                onSetDefault = { target, mediaType, uri -> viewModel.setDefaultFolder(target, mediaType, uri) }
+                frozenHint = when {
+                    state.presetEnabled -> "预设方案已启用，默认文件夹暂不可改"
+                    state.scheduleEnabled -> "时段方案已启用，默认文件夹暂不可改（关闭时段后生效）"
+                    else -> null
+                },
+                onSetDefault = { target, mediaType, uri ->
+                    if (!defaultsFrozen) viewModel.setDefaultFolder(target, mediaType, uri)
+                }
             )
         }
 
@@ -191,6 +199,7 @@ private fun DefaultFoldersSection(
     defaultLockImageUri: String?,
     defaultHomeVideoUri: String?,
     defaultLockVideoUri: String?,
+    frozenHint: String? = null,
     onSetDefault: (target: String, mediaType: String, uri: String?) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -201,9 +210,11 @@ private fun DefaultFoldersSection(
             modifier = Modifier.padding(horizontal = 4.dp)
         )
         Text(
-            "弹层项目或 Tasker 动作未指定文件夹时使用",
+            frozenHint
+                ?: "优先级最低：无预设/时段/壁纸页指定时，弹层与切换才用这里",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (frozenHint != null) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
 

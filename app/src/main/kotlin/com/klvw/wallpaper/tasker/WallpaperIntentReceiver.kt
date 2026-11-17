@@ -10,6 +10,7 @@ import android.provider.MediaStore
 import android.widget.Toast
 import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperTarget
+import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
@@ -29,6 +30,7 @@ class WallpaperIntentReceiver : BroadcastReceiver() {
     @Inject lateinit var wallpaperRepository: WallpaperRepository
     @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
     @Inject lateinit var scheduleManager: ScheduleManager
+    @Inject lateinit var prefs: SettingsPreferences
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION) return
@@ -44,17 +46,18 @@ class WallpaperIntentReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                if (scheduleManager.isEnabled() && folderName.isNullOrBlank()) {
+                if ((scheduleManager.isEnabled() || prefs.presetEnabled.first()) &&
+                    folderName.isNullOrBlank()
+                ) {
                     val screens = when (target) {
                         WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
                         WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
                         else -> listOf(WallpaperTarget.HOME)
                     }
                     for (screen in screens) {
-                        val rule = scheduleManager.currentRule(screen) ?: continue
+                        val uri = scheduleManager.resolveFolderUri(screen, type) ?: continue
                         val item = shuffleHistoryManager.pickNext(
-                            folderRepository.getItemsFromFolder(rule.folderUri, rule.media),
-                            rule.folderUri, rule.media
+                            folderRepository.getItemsFromFolder(uri, type), uri, type
                         ) ?: continue
                         wallpaperRepository.setWallpaper(item, screen)
                     }

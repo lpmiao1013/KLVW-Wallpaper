@@ -25,10 +25,20 @@ class PresetTileService : TileService() {
     @Inject lateinit var presetManager: PresetManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var listenJob: kotlinx.coroutines.Job? = null
 
     override fun onStartListening() {
         super.onStartListening()
-        scope.launch { refreshTile() }
+        listenJob?.cancel()
+        listenJob = scope.launch {
+            prefs.presetEnabled.collect { refreshTile(it) }
+        }
+    }
+
+    override fun onStopListening() {
+        listenJob?.cancel()
+        listenJob = null
+        super.onStopListening()
     }
 
     override fun onClick() {
@@ -40,12 +50,11 @@ class PresetTileService : TileService() {
                     Toast.makeText(applicationContext, err, Toast.LENGTH_SHORT).show()
                 }
             }
-            refreshTile()
+            refreshTile(prefs.presetEnabled.first())
         }
     }
 
-    private suspend fun refreshTile() {
-        val on = prefs.presetEnabled.first()
+    private fun refreshTile(on: Boolean) {
         val tile = qsTile ?: return
         // ACTIVE = system accent / white; INACTIVE = muted / no accent.
         tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
@@ -58,6 +67,7 @@ class PresetTileService : TileService() {
     }
 
     override fun onDestroy() {
+        listenJob?.cancel()
         super.onDestroy()
         scope.cancel()
     }

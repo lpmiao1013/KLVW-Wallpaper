@@ -15,6 +15,10 @@ import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.preset.PresetManager
 import com.klvw.wallpaper.schedule.ScheduleManager
+import com.klvw.wallpaper.tile.FolderHideTileService
+import com.klvw.wallpaper.tile.PresetTileService
+import com.klvw.wallpaper.tile.ScheduleTileService
+import com.klvw.wallpaper.tile.requestTileListening
 import com.klvw.wallpaper.util.SharpnessLogStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -210,9 +214,15 @@ class WallpaperViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            prefs.scheduleEnabled.collect { enabled ->
-                _state.update { it.copy(scheduleEnabled = enabled) }
-                if (enabled) syncFolderToSchedule()
+            combine(prefs.scheduleEnabled, prefs.presetEnabled) { scheduleOn, presetOn ->
+                scheduleOn to presetOn
+            }.collect { (scheduleOn, presetOn) ->
+                _state.update { it.copy(scheduleEnabled = scheduleOn, presetEnabled = presetOn) }
+                when {
+                    presetOn -> syncFolderToPreset()
+                    scheduleOn -> syncFolderToSchedule()
+                    else -> restorePickerFromActiveFolders()
+                }
             }
         }
 
@@ -224,11 +234,6 @@ class WallpaperViewModel @Inject constructor(
             }
         }
 
-        viewModelScope.launch {
-            prefs.presetEnabled.collect { enabled ->
-                _state.update { it.copy(presetEnabled = enabled) }
-            }
-        }
         viewModelScope.launch {
             combine(
                 prefs.presetHomeUri,
@@ -276,7 +281,13 @@ class WallpaperViewModel @Inject constructor(
         }
     }
 
-    /** Lock picker to the active schedule folder for the current target. */
+    /** True when schedule (not preset) is driving folder resolution. */
+    private fun isScheduleDrivingUi(): Boolean =
+        _state.value.scheduleEnabled && !_state.value.presetEnabled
+
+    private fun isPresetDrivingUi(): Boolean = _state.value.presetEnabled
+
+    /** Lock picker to the active schedule folder for the current target (UI only — does not overwrite active prefs). */
     private suspend fun syncFolderToSchedule() {
         if (!scheduleManager.isEnabled()) return
         val screen = when (_state.value.target) {
@@ -285,8 +296,6 @@ class WallpaperViewModel @Inject constructor(
         }
         val rule = scheduleManager.currentRule(screen) ?: return
         val tab = if (rule.media == FolderType.VIDEO) MediaTab.VIDEO else MediaTab.IMAGE
-        if (tab == MediaTab.IMAGE) savedImageFolderUri = rule.folderUri
-        else savedVideoFolderUri = rule.folderUri
         _state.update {
             it.copy(
                 mediaTab = tab,
@@ -299,13 +308,74 @@ class WallpaperViewModel @Inject constructor(
         loadPreviewItems(clearFirst = false)
     }
 
+    private suspend fun syncFolderToPreset() {
+        if (!_state.value.presetEnabled) return
+        val screen = when (_state.value.target) {
+            WallpaperTarget.LOCK -> WallpaperTarget.LOCK
+            else -> WallpaperTarget.HOME
+        }
+        val isVideo = if (screen == WallpaperTarget.LOCK) {
+            _state.value.presetLockIsVideo
+        } else {
+            _state.value.presetHomeIsVideo
+        }
+        val source = if (screen == WallpaperTarget.LOCK) {
+            _state.value.presetLockSource
+        } else {
+            _state.value.presetHomeSource
+        }
+        val uri = if (screen == WallpaperTarget.LOCK) {
+            _state.value.presetLockUri
+        } else {
+            _state.value.presetHomeUri
+        }
+        if (source != "folder" || uri.isNullOrBlank()) return
+        val tab = if (isVideo) MediaTab.VIDEO else MediaTab.IMAGE
+        _state.update {
+            it.copy(
+                mediaTab = tab,
+                selectedFolderUri = uri,
+                selectedItem = null,
+                previewItems = emptyList(),
+                isLoadingPreview = true
+            )
+        }
+        loadPreviewItems(clearFirst = false)
+    }
+
+    /** After schedule/preset release, restore tabbar from persisted active folders. */
+    private suspend fun restorePickerFromActiveFolders() {
+        savedImageFolderUri = prefs.activeImageFolderUri.first()
+        savedVideoFolderUri = prefs.activeVideoFolderUri.first()
+        val tab = _state.value.mediaTab
+        val folderUri = when (tab) {
+            MediaTab.IMAGE -> savedImageFolderUri
+            MediaTab.VIDEO -> savedVideoFolderUri
+            MediaTab.STATIC -> null
+        }
+        _state.update {
+            it.copy(
+                selectedFolderUri = folderUri,
+                selectedItem = null,
+                previewItems = emptyList(),
+                isLoadingPreview = tab != MediaTab.STATIC
+            )
+        }
+        if (tab != MediaTab.STATIC) loadPreviewItems(clearFirst = false)
+    }
+
     fun setMediaTab(tab: MediaTab) {
         if (_state.value.isLoadingPreview && _state.value.mediaTab == tab) return
-        if (_state.value.scheduleEnabled && tab == MediaTab.STATIC) {
+        if (isPresetDrivingUi()) {
+            _state.update { it.copy(errorMessage = "预设方案已启用，请先关闭预设") }
+            viewModelScope.launch { syncFolderToPreset() }
+            return
+        }
+        if (isScheduleDrivingUi() && tab == MediaTab.STATIC) {
             _state.update { it.copy(errorMessage = "时段方案已启用，请使用当前时段文件夹") }
             return
         }
-        if (_state.value.scheduleEnabled) {
+        if (isScheduleDrivingUi()) {
             viewModelScope.launch { syncFolderToSchedule() }
             return
         }
@@ -330,8 +400,9 @@ class WallpaperViewModel @Inject constructor(
 
     fun setTarget(target: WallpaperTarget) {
         _state.update { it.copy(target = target) }
-        if (_state.value.scheduleEnabled) {
-            viewModelScope.launch { syncFolderToSchedule() }
+        when {
+            isPresetDrivingUi() -> viewModelScope.launch { syncFolderToPreset() }
+            isScheduleDrivingUi() -> viewModelScope.launch { syncFolderToSchedule() }
         }
     }
 
@@ -342,7 +413,11 @@ class WallpaperViewModel @Inject constructor(
 
     fun selectFolder(folderUri: String?) {
         if (_state.value.isLoadingPreview) return
-        if (_state.value.scheduleEnabled) {
+        if (isPresetDrivingUi()) {
+            _state.update { it.copy(errorMessage = "预设方案已启用，只能使用预设文件夹") }
+            return
+        }
+        if (isScheduleDrivingUi()) {
             _state.update { it.copy(errorMessage = "时段方案已启用，只能使用当前时段文件夹") }
             return
         }
@@ -370,6 +445,12 @@ class WallpaperViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val target = _state.value.target
+                if (isPresetDrivingUi()) {
+                    _state.update {
+                        it.copy(isLoading = false, errorMessage = "预设方案已启用，请先关闭预设再手动指定")
+                    }
+                    return@launch
+                }
                 if (scheduleManager.isEnabled()) {
                     val screens = when (target) {
                         WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
@@ -456,6 +537,8 @@ class WallpaperViewModel @Inject constructor(
     fun setFolderHideMode(enabled: Boolean) {
         viewModelScope.launch {
             prefs.setFolderHideMode(enabled)
+            if (enabled) prefs.setShowHiddenFolders(false)
+            requestTileListening(context, FolderHideTileService::class.java)
             if (enabled && !_state.value.showHiddenFolders) {
                 val sel = _state.value.selectedFolderUri
                 val marked = _state.value.markedFolders.find { it.uri == sel }
@@ -516,7 +599,9 @@ class WallpaperViewModel @Inject constructor(
 
     fun setScheduleEnabled(enabled: Boolean, onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            onResult(scheduleManager.setEnabled(enabled))
+            val err = scheduleManager.setEnabled(enabled)
+            requestTileListening(context, ScheduleTileService::class.java)
+            onResult(err)
         }
     }
 
@@ -569,13 +654,19 @@ class WallpaperViewModel @Inject constructor(
 
     fun enablePreset(onResult: (String?) -> Unit = {}) {
         viewModelScope.launch {
-            onResult(presetManager.enable())
+            val err = presetManager.enable()
+            requestTileListening(context, PresetTileService::class.java)
+            requestTileListening(context, ScheduleTileService::class.java)
+            onResult(err)
         }
     }
 
     fun disablePreset(onResult: (String?) -> Unit = {}) {
         viewModelScope.launch {
-            onResult(presetManager.disable())
+            val err = presetManager.disable()
+            requestTileListening(context, PresetTileService::class.java)
+            requestTileListening(context, ScheduleTileService::class.java)
+            onResult(err)
         }
     }
 

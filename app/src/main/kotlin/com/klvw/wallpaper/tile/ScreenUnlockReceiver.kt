@@ -50,29 +50,25 @@ class ScreenUnlockReceiver : BroadcastReceiver() {
                 val prefs = ep.prefs()
                 if (!prefs.appEnabled.first()) return@launch
 
-                val scheduleOn = ep.scheduleManager().isEnabled()
-                val appliedHome = if (scheduleOn) {
-                    applyScheduleForScreen(WallpaperTarget.HOME, ep)
+                // Unified stack: preset → schedule → active tabbar → default.
+                val appliedHome = if (ep.scheduleManager().isEnabled() || ep.prefs().presetEnabled.first()) {
+                    applyResolvedForScreen(WallpaperTarget.HOME, ep)
                 } else {
                     // Pick among enabled types that actually have items — do NOT fall through
                     // image → video on empty/failed image (that made lock "switch to video mode").
                     applyOneForScreen(
                         imageEnabled = prefs.displayControlHomeImage.first(),
-                        imageFolder = prefs.defaultHomeImageFolderUri.first(),
                         videoEnabled = prefs.displayControlHomeVideo.first(),
-                        videoFolder = prefs.defaultHomeVideoFolderUri.first(),
                         target = WallpaperTarget.HOME,
                         ep = ep
                     )
                 }
-                val appliedLock = if (scheduleOn) {
-                    applyScheduleForScreen(WallpaperTarget.LOCK, ep)
+                val appliedLock = if (ep.scheduleManager().isEnabled() || ep.prefs().presetEnabled.first()) {
+                    applyResolvedForScreen(WallpaperTarget.LOCK, ep)
                 } else {
                     applyOneForScreen(
                         imageEnabled = prefs.displayControlLockImage.first(),
-                        imageFolder = prefs.defaultLockImageFolderUri.first(),
                         videoEnabled = prefs.displayControlLockVideo.first(),
-                        videoFolder = prefs.defaultLockVideoFolderUri.first(),
                         target = WallpaperTarget.LOCK,
                         ep = ep
                     )
@@ -106,14 +102,21 @@ class ScreenUnlockReceiver : BroadcastReceiver() {
         }
     }
 
-    private suspend fun applyScheduleForScreen(
+    /** Preset or schedule: resolve current media type + folder via ScheduleManager stack. */
+    private suspend fun applyResolvedForScreen(
         target: WallpaperTarget,
         ep: UnlockEntryPoint
     ): Boolean {
-        val rule = ep.scheduleManager().currentRule(target) ?: return false
-        val items = ep.folderRepository().getItemsFromFolder(rule.folderUri, rule.media)
-        val item = ep.shuffleHistoryManager().pickNext(items, rule.folderUri, rule.media)
-            ?: return false
+        val prefs = ep.prefs()
+        val isVideo = when (target) {
+            WallpaperTarget.HOME -> prefs.homeIsVideo.first()
+            WallpaperTarget.LOCK -> prefs.lockIsVideo.first()
+            else -> false
+        }
+        val type = if (isVideo) FolderType.VIDEO else FolderType.IMAGE
+        val folderUri = ep.scheduleManager().resolveFolderUri(target, type) ?: return false
+        val items = ep.folderRepository().getItemsFromFolder(folderUri, type)
+        val item = ep.shuffleHistoryManager().pickNext(items, folderUri, type) ?: return false
         ep.wallpaperRepository().setWallpaper(item, target)
         return true
     }
@@ -122,26 +125,31 @@ class ScreenUnlockReceiver : BroadcastReceiver() {
      * Applies exactly one wallpaper for [target] from enabled types that actually have media.
      * Prefers image when both are ready (same as the old happy path), but never falls through
      * to video merely because the image folder was empty / missing while its toggle is on.
+     * Folders come from resolveFolderUri (active tabbar → default).
      */
     private suspend fun applyOneForScreen(
         imageEnabled: Boolean,
-        imageFolder: String?,
         videoEnabled: Boolean,
-        videoFolder: String?,
         target: WallpaperTarget,
         ep: UnlockEntryPoint
     ): Boolean {
         val candidates = mutableListOf<UnlockCandidate>()
-        if (imageEnabled && imageFolder != null) {
-            val items = ep.folderRepository().getItemsFromFolder(imageFolder, FolderType.IMAGE)
-            if (items.isNotEmpty()) {
-                candidates += UnlockCandidate(imageFolder, FolderType.IMAGE, items)
+        if (imageEnabled) {
+            val imageFolder = ep.scheduleManager().resolveFolderUri(target, FolderType.IMAGE)
+            if (imageFolder != null) {
+                val items = ep.folderRepository().getItemsFromFolder(imageFolder, FolderType.IMAGE)
+                if (items.isNotEmpty()) {
+                    candidates += UnlockCandidate(imageFolder, FolderType.IMAGE, items)
+                }
             }
         }
-        if (videoEnabled && videoFolder != null) {
-            val items = ep.folderRepository().getItemsFromFolder(videoFolder, FolderType.VIDEO)
-            if (items.isNotEmpty()) {
-                candidates += UnlockCandidate(videoFolder, FolderType.VIDEO, items)
+        if (videoEnabled) {
+            val videoFolder = ep.scheduleManager().resolveFolderUri(target, FolderType.VIDEO)
+            if (videoFolder != null) {
+                val items = ep.folderRepository().getItemsFromFolder(videoFolder, FolderType.VIDEO)
+                if (items.isNotEmpty()) {
+                    candidates += UnlockCandidate(videoFolder, FolderType.VIDEO, items)
+                }
             }
         }
         if (candidates.isEmpty()) return false

@@ -263,33 +263,22 @@ class KLVWPopupViewModel @Inject constructor(
                 }
                 val wantVideo = item.actionType == POPUP_ACTION_RANDOM_VIDEO
                 for (screen in screens) {
-                    if (scheduleManager.isEnabled()) {
-                        val rule = scheduleManager.currentRule(screen) ?: continue
-                        val wallpaperItem = shuffleHistoryManager.pickNext(
-                            folderRepository.getItemsFromFolder(rule.folderUri, rule.media),
-                            rule.folderUri, rule.media
-                        ) ?: continue
-                        wallpaperRepository.setWallpaper(wallpaperItem, screen)
-                    } else {
-                        val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
-                        val folderUri = item.folderUri.ifBlank {
-                            when {
-                                screen == WallpaperTarget.LOCK && type == FolderType.IMAGE ->
-                                    prefs.defaultLockImageFolderUri.first()
-                                screen == WallpaperTarget.LOCK -> prefs.defaultLockVideoFolderUri.first()
-                                type == FolderType.IMAGE -> prefs.defaultHomeImageFolderUri.first()
-                                else -> prefs.defaultHomeVideoFolderUri.first()
-                            }
-                        } ?: continue
-                        val wallpaperItem = shuffleHistoryManager.pickNext(
-                            folderRepository.getItemsFromFolder(folderUri, type), folderUri, type
-                        ) ?: continue
-                        wallpaperRepository.setWallpaper(wallpaperItem, screen)
-                    }
+                    val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
+                    // Explicit item folder wins when schedule/preset are off; otherwise use stack.
+                    val folderUri = when {
+                        scheduleManager.isEnabled() || prefs.presetEnabled.first() ->
+                            scheduleManager.resolveFolderUri(screen, type)
+                        item.folderUri.isNotBlank() -> item.folderUri
+                        else -> scheduleManager.resolveFolderUri(screen, type)
+                    } ?: continue
+                    val wallpaperItem = shuffleHistoryManager.pickNext(
+                        folderRepository.getItemsFromFolder(folderUri, type), folderUri, type
+                    ) ?: continue
+                    wallpaperRepository.setWallpaper(wallpaperItem, screen)
                 }
             }
             POPUP_ACTION_STATIC_IMAGE -> {
-                if (scheduleManager.isEnabled()) return
+                if (scheduleManager.isEnabled() || prefs.presetEnabled.first()) return
                 if (item.imageUri.isBlank()) return
                 wallpaperRepository.setWallpaper(
                     WallpaperItem(Uri.parse(item.imageUri), FolderType.IMAGE, "", ""),
@@ -336,9 +325,9 @@ class KLVWPopupViewModel @Inject constructor(
         }
     }
 
-    /** @return false when schedule is enabled (defaults are frozen). */
+    /** @return false when schedule/preset is driving (defaults are frozen). */
     suspend fun onFolderSelected(mediaType: String, target: String, folderUri: String): Boolean {
-        if (scheduleManager.isEnabled()) return false
+        if (scheduleManager.isEnabled() || prefs.presetEnabled.first()) return false
         prefs.setDefaultFolderUri(target, mediaType, folderUri)
         return true
     }
@@ -352,6 +341,7 @@ class KLVWPopupViewModel @Inject constructor(
             "both" -> WallpaperTarget.BOTH
             else   -> WallpaperTarget.HOME
         }
+        if (prefs.presetEnabled.first()) return false
         if (scheduleManager.isEnabled()) {
             val screens = when (target) {
                 WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)

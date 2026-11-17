@@ -28,16 +28,33 @@ class ScheduleTileService : TileService() {
     @Inject lateinit var scheduleManager: ScheduleManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var listenJob: kotlinx.coroutines.Job? = null
 
     override fun onStartListening() {
         super.onStartListening()
-        scope.launch { refreshTile() }
+        listenJob?.cancel()
+        listenJob = scope.launch {
+            kotlinx.coroutines.flow.combine(
+                prefs.scheduleEnabled,
+                prefs.scheduleActiveGroupId,
+                prefs.scheduleGroupsJson
+            ) { on, _, _ -> on }
+                .collect { on -> refreshTile(on) }
+        }
+    }
+
+    override fun onStopListening() {
+        listenJob?.cancel()
+        listenJob = null
+        super.onStopListening()
     }
 
     override fun onClick() {
         super.onClick()
         scope.launch {
-            if (!scheduleManager.canUseScheduleTile()) {
+            val on = prefs.scheduleEnabled.first()
+            // Allow turning OFF even if the group became invalid; only gate turning ON.
+            if (!on && !scheduleManager.canUseScheduleTile()) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         applicationContext,
@@ -45,28 +62,26 @@ class ScheduleTileService : TileService() {
                         Toast.LENGTH_SHORT
                     ).show()
                 }
-                refreshTile()
+                refreshTile(on)
                 return@launch
             }
-            val on = prefs.scheduleEnabled.first()
             val err = scheduleManager.setEnabled(!on)
             if (err != null) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(applicationContext, err, Toast.LENGTH_SHORT).show()
                 }
             }
-            refreshTile()
+            refreshTile(prefs.scheduleEnabled.first())
         }
     }
 
-    private suspend fun refreshTile() {
+    private suspend fun refreshTile(on: Boolean) {
         val tile = qsTile ?: return
         val ready = scheduleManager.canUseScheduleTile()
-        val on = prefs.scheduleEnabled.first()
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_schedule)
         tile.label = getString(R.string.schedule_tile_label)
         when {
-            !ready -> {
+            !ready && !on -> {
                 tile.state = Tile.STATE_UNAVAILABLE
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     tile.subtitle = "未配置"
@@ -89,6 +104,7 @@ class ScheduleTileService : TileService() {
     }
 
     override fun onDestroy() {
+        listenJob?.cancel()
         super.onDestroy()
         scope.cancel()
     }

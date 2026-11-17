@@ -54,32 +54,11 @@ class KLVWQuickSetActivity : ComponentActivity() {
     }
 
     private suspend fun applyAction(action: String, target: WallpaperTarget) {
-        if (scheduleManager.isEnabled() && target != WallpaperTarget.BOTH) {
-            val rule = scheduleManager.currentRule(target) ?: return
-            val item = shuffleHistoryManager.pickNext(
-                folderRepository.getItemsFromFolder(rule.folderUri, rule.media),
-                rule.folderUri, rule.media
-            ) ?: return
-            wallpaperRepository.setWallpaper(item, target)
-            return
-        }
         when (action) {
-            "random_image" -> {
-                val uri = resolveDefaultFolderUri(FolderType.IMAGE, target) ?: return
-                val item = shuffleHistoryManager.pickNext(
-                    folderRepository.getItemsFromFolder(uri, FolderType.IMAGE), uri, FolderType.IMAGE
-                ) ?: return
-                wallpaperRepository.setWallpaper(item, target)
-            }
-            "random_video" -> {
-                val uri = resolveDefaultFolderUri(FolderType.VIDEO, target) ?: return
-                val item = shuffleHistoryManager.pickNext(
-                    folderRepository.getItemsFromFolder(uri, FolderType.VIDEO), uri, FolderType.VIDEO
-                ) ?: return
-                wallpaperRepository.setWallpaper(item, target)
-            }
+            "random_image" -> applyResolvedRandom(FolderType.IMAGE, target)
+            "random_video" -> applyResolvedRandom(FolderType.VIDEO, target)
             "static_image" -> {
-                if (scheduleManager.isEnabled()) return
+                if (scheduleManager.isEnabled() || prefs.presetEnabled.first()) return
                 val uri = when (target) {
                     WallpaperTarget.HOME -> prefs.quickSetHomeStaticUri.first()
                     WallpaperTarget.LOCK -> prefs.quickSetLockStaticUri.first()
@@ -90,6 +69,21 @@ class KLVWQuickSetActivity : ComponentActivity() {
                     target
                 )
             }
+        }
+    }
+
+    private suspend fun applyResolvedRandom(type: FolderType, target: WallpaperTarget) {
+        val screens = when (target) {
+            WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
+            WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
+            else -> listOf(WallpaperTarget.HOME)
+        }
+        for (screen in screens) {
+            val uri = scheduleManager.resolveFolderUri(screen, type) ?: continue
+            val item = shuffleHistoryManager.pickNext(
+                folderRepository.getItemsFromFolder(uri, type), uri, type
+            ) ?: continue
+            wallpaperRepository.setWallpaper(item, screen)
         }
     }
 
@@ -129,11 +123,4 @@ class KLVWQuickSetActivity : ComponentActivity() {
         return keys
     }
 
-    private suspend fun resolveDefaultFolderUri(type: FolderType, target: WallpaperTarget): String? = when {
-        type == FolderType.IMAGE && target == WallpaperTarget.HOME -> prefs.defaultHomeImageFolderUri.first()
-        type == FolderType.IMAGE && target == WallpaperTarget.LOCK -> prefs.defaultLockImageFolderUri.first()
-        type == FolderType.VIDEO && target == WallpaperTarget.HOME -> prefs.defaultHomeVideoFolderUri.first()
-        type == FolderType.VIDEO && target == WallpaperTarget.LOCK -> prefs.defaultLockVideoFolderUri.first()
-        else -> null
-    }
 }

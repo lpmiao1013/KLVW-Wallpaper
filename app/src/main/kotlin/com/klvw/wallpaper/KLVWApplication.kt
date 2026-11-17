@@ -247,29 +247,17 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
                         else -> listOf(WallpaperTarget.HOME)
                     }
                     for (screen in screens) {
-                        if (scheduleManager.isEnabled()) {
-                            val rule = scheduleManager.currentRule(screen) ?: continue
-                            val item = shuffleHistoryManager.pickNext(
-                                folderRepository.getItemsFromFolder(rule.folderUri, rule.media),
-                                rule.folderUri, rule.media
-                            ) ?: continue
-                            wallpaperRepository.setWallpaper(item, screen)
-                        } else {
-                            val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
-                            val uri = folderUri.ifBlank {
-                                when {
-                                    screen == WallpaperTarget.LOCK && type == FolderType.IMAGE ->
-                                        prefs.defaultLockImageFolderUri.first()
-                                    screen == WallpaperTarget.LOCK -> prefs.defaultLockVideoFolderUri.first()
-                                    type == FolderType.IMAGE -> prefs.defaultHomeImageFolderUri.first()
-                                    else -> prefs.defaultHomeVideoFolderUri.first()
-                                }
-                            } ?: continue
-                            val item = shuffleHistoryManager.pickNext(
-                                folderRepository.getItemsFromFolder(uri, type), uri, type
-                            ) ?: continue
-                            wallpaperRepository.setWallpaper(item, screen)
-                        }
+                        val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
+                        val uri = when {
+                            scheduleManager.isEnabled() || prefs.presetEnabled.first() ->
+                                scheduleManager.resolveFolderUri(screen, type)
+                            folderUri.isNotBlank() -> folderUri
+                            else -> scheduleManager.resolveFolderUri(screen, type)
+                        } ?: continue
+                        val item = shuffleHistoryManager.pickNext(
+                            folderRepository.getItemsFromFolder(uri, type), uri, type
+                        ) ?: continue
+                        wallpaperRepository.setWallpaper(item, screen)
                     }
                 }
                 "restore" -> {

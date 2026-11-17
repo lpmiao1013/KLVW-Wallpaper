@@ -25,9 +25,20 @@ class FolderHideTileService : TileService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private var listenJob: kotlinx.coroutines.Job? = null
+
     override fun onStartListening() {
         super.onStartListening()
-        scope.launch { refreshTile() }
+        listenJob?.cancel()
+        listenJob = scope.launch {
+            prefs.folderHideMode.collect { refreshTile(it) }
+        }
+    }
+
+    override fun onStopListening() {
+        listenJob?.cancel()
+        listenJob = null
+        super.onStopListening()
     }
 
     override fun onClick() {
@@ -37,12 +48,11 @@ class FolderHideTileService : TileService() {
             prefs.setFolderHideMode(next)
             // Turning hide mode on should not leave "show hidden" stuck on.
             if (next) prefs.setShowHiddenFolders(false)
-            refreshTile()
+            refreshTile(next)
         }
     }
 
-    private suspend fun refreshTile() {
-        val on = prefs.folderHideMode.first()
+    private fun refreshTile(on: Boolean) {
         val tile = qsTile ?: return
         tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_folder_hide)
@@ -54,6 +64,7 @@ class FolderHideTileService : TileService() {
     }
 
     override fun onDestroy() {
+        listenJob?.cancel()
         super.onDestroy()
         scope.cancel()
     }
