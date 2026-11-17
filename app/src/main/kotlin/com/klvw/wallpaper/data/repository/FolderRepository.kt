@@ -36,16 +36,15 @@ class FolderRepository @Inject constructor(
     fun getAllFolders(): Flow<List<FolderEntity>> = folderDao.getAll()
 
     /**
-     * UI folder lists. When hide-mode is on and "show hidden" is off, privacy-marked
-     * folders are omitted. Wallpaper / timers still resolve by URI.
+     * UI folder lists. When hide-mode is on, privacy-marked folders are omitted from
+     * every UI list (picker / folder manager / popup). Wallpaper / timers still resolve by URI.
      */
     fun getFoldersByType(type: FolderType): Flow<List<FolderEntity>> =
         combine(
             folderDao.getByType(type),
-            prefs.folderHideMode,
-            prefs.showHiddenFolders
-        ) { all, hideMode, showHidden ->
-            if (!hideMode || showHidden) all
+            prefs.folderHideMode
+        ) { all, hideMode ->
+            if (!hideMode) all
             else all.filter { !it.hidden }
         }.distinctUntilChanged()
 

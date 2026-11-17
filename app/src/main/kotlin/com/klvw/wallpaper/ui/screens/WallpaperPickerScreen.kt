@@ -155,6 +155,19 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
     ) {
         Spacer(Modifier.height(8.dp))
 
+        val schemeLabel = when {
+            state.presetEnabled -> "当前：预设方案（最高优先级）"
+            state.scheduleEnabled -> "当前：时段方案"
+            !state.activeImageFolderUri.isNullOrBlank() || !state.activeVideoFolderUri.isNullOrBlank() ->
+                "当前：壁纸页指定"
+            else -> "当前：默认文件夹"
+        }
+        Text(
+            schemeLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+
         // Three-tab selector: Image | Static | Video
         val tabsEnabled = !state.isLoadingPreview
         Row(

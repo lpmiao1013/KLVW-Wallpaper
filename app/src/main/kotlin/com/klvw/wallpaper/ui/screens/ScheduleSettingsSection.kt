@@ -96,7 +96,7 @@ fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (uiState.presetEnabled) {
             Text(
-                "预设方案生效中：时段自动切换已暂停，关闭预设后会按配置恢复。",
+                "预设方案生效中（优先级更高）：时段已暂停，关闭预设后才会按时段/指定/默认恢复。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
@@ -117,13 +117,15 @@ fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("启用时段方案", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "按 24 小时铺满桌面+锁屏；与全局开关无关",
+                    if (uiState.presetEnabled) "预设开启时不可切换时段开关"
+                    else "优先级低于预设；高于壁纸页指定与默认",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Switch(
                 checked = enabled,
+                enabled = !uiState.presetEnabled,
                 onCheckedChange = { on ->
                     viewModel.setScheduleEnabled(on) { err ->
                         if (err != null) toast(err)

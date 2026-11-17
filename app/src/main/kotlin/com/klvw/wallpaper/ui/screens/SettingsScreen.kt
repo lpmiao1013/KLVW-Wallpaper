@@ -73,6 +73,8 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
     ) {
         Spacer(Modifier.height(8.dp))
 
+        CurrentSchemeBanner(viewModel = viewModel)
+
         SettingsSection(title = "性能") {
             SettingToggle(
                 icon = Icons.Default.Bolt,
@@ -2041,12 +2043,64 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
 }
 
 @Composable
+private fun CurrentSchemeBanner(viewModel: WallpaperViewModel) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val groupsJson by viewModel.scheduleGroupsJson.collectAsStateWithLifecycle()
+    val activeId by viewModel.scheduleActiveGroupId.collectAsStateWithLifecycle()
+    val groups = remember(groupsJson) {
+        com.klvw.wallpaper.data.model.ScheduleGroup.listFromJson(groupsJson)
+    }
+    val activeGroupName = groups.find { it.id == activeId }?.name
+
+    val (title, detail) = when {
+        state.presetEnabled -> {
+            val home = if (state.presetHomeIsVideo) "视频" else "图片"
+            val lock = if (state.presetLockIsVideo) "视频" else "图片"
+            val homeSrc = if (state.presetHomeSource == "folder") "文件夹" else "文件"
+            val lockSrc = if (state.presetLockSource == "folder") "文件夹" else "文件"
+            "当前方案：预设" to "桌面 $home/$homeSrc · 锁屏 $lock/$lockSrc（最高优先级）"
+        }
+        state.scheduleEnabled -> {
+            val name = activeGroupName?.let { "「$it」" } ?: "（未选分组）"
+            "当前方案：时段" to "分组 $name · 按时间窗口切换"
+        }
+        !state.activeImageFolderUri.isNullOrBlank() || !state.activeVideoFolderUri.isNullOrBlank() -> {
+            "当前方案：壁纸页指定" to "双击/定时优先用壁纸页选中的文件夹"
+        }
+        else -> {
+            "当前方案：默认文件夹" to "使用文件夹管理里配置的桌面/锁屏默认"
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            "优先级：预设 ＞ 时段 ＞ 壁纸页指定 ＞ 默认",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
 private fun FolderHideSettingsSection(viewModel: WallpaperViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "开启后，带隐私标记的文件夹会从列表中消失。开启后本区会隐藏，只能用磁贴关闭。",
+            "开启后，带隐私标记的文件夹会从壁纸页、文件夹管理、弹层等列表中消失。开启后本区隐藏，只能用磁贴关闭。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -2057,14 +2111,6 @@ private fun FolderHideSettingsSection(viewModel: WallpaperViewModel) {
             subtitle = "与快捷设置磁贴同步",
             checked = state.folderHideMode,
             onCheckedChange = { viewModel.setFolderHideMode(it) }
-        )
-        HorizontalDivider(thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 4.dp))
-        SettingToggle(
-            icon = Icons.Default.Visibility,
-            title = "显示已标记文件夹",
-            subtitle = "隐藏模式关闭时预览标记列表仍可用",
-            checked = state.showHiddenFolders,
-            onCheckedChange = { viewModel.setShowHiddenFolders(it) }
         )
         OutlinedButton(
             onClick = {
@@ -2079,21 +2125,6 @@ private fun FolderHideSettingsSection(viewModel: WallpaperViewModel) {
             Icon(Icons.Default.AddToHomeScreen, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text("添加「文件夹隐藏」磁贴")
-        }
-        if (state.markedFolders.isNotEmpty()) {
-            Text(
-                "已标记 ${state.markedFolders.size} 个",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
-            state.markedFolders.forEach { folder ->
-                Text(
-                    "· ${folder.displayName}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-            }
         }
     }
 }

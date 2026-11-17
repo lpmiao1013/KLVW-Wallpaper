@@ -62,6 +62,9 @@ data class WallpaperUiState(
     val defaultLockImageFolderUri: String? = null,
     val defaultHomeVideoFolderUri: String? = null,
     val defaultLockVideoFolderUri: String? = null,
+    /** Wallpaper tabbar “指定” folders (persist across schedule/preset). */
+    val activeImageFolderUri: String? = null,
+    val activeVideoFolderUri: String? = null,
     val scheduleEnabled: Boolean = false,
     /** Currently applied home / lock wallpaper content URIs (from prefs). */
     val homeAppliedUri: String? = null,
@@ -210,6 +213,14 @@ class WallpaperViewModel @Inject constructor(
                     defaultHomeVideoFolderUri = d[2],
                     defaultLockVideoFolderUri = d[3]
                 )}
+            }
+        }
+
+        viewModelScope.launch {
+            combine(prefs.activeImageFolderUri, prefs.activeVideoFolderUri) { img, vid ->
+                img to vid
+            }.collect { (img, vid) ->
+                _state.update { it.copy(activeImageFolderUri = img, activeVideoFolderUri = vid) }
             }
         }
 
@@ -526,7 +537,7 @@ class WallpaperViewModel @Inject constructor(
         viewModelScope.launch {
             folderRepository.setFolderPrivacyMark(folder, marked)
             // If hide-mode is on and we just marked the current picker folder, leave it.
-            if (marked && _state.value.folderHideMode && !_state.value.showHiddenFolders &&
+            if (marked && _state.value.folderHideMode &&
                 _state.value.selectedFolderUri == folder.uri
             ) {
                 clearPickerIfSelected(folder)
@@ -539,7 +550,7 @@ class WallpaperViewModel @Inject constructor(
             prefs.setFolderHideMode(enabled)
             if (enabled) prefs.setShowHiddenFolders(false)
             requestTileListening(context, FolderHideTileService::class.java)
-            if (enabled && !_state.value.showHiddenFolders) {
+            if (enabled) {
                 val sel = _state.value.selectedFolderUri
                 val marked = _state.value.markedFolders.find { it.uri == sel }
                 if (marked != null) clearPickerIfSelected(marked)

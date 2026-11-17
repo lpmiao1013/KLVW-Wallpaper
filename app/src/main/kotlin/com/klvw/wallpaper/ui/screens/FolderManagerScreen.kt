@@ -120,10 +120,7 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
         )
         if (state.folderHideMode) {
             Text(
-                if (state.showHiddenFolders)
-                    "隐藏模式已开 · 已开启「显示隐藏文件夹」"
-                else
-                    "隐藏模式已开 · 带隐私标记的文件夹已从列表隐藏（壁纸仍可用）",
+                "隐藏模式已开 · 带隐私标记的文件夹已从列表隐藏（按 URI 设壁纸仍可用）",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 4.dp)
