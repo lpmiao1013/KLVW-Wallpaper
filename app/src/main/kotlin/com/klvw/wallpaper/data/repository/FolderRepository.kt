@@ -11,9 +11,12 @@ import com.klvw.wallpaper.data.db.FolderDao
 import com.klvw.wallpaper.data.db.FolderEntity
 import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperItem
+import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -23,7 +26,8 @@ import javax.inject.Singleton
 @Singleton
 class FolderRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val folderDao: FolderDao
+    private val folderDao: FolderDao,
+    private val prefs: SettingsPreferences
 ) {
     /** In-memory folder listing cache. Filled on first scan; cleared only via [invalidateItemsCache]. */
     private val itemsCache = ConcurrentHashMap<String, List<WallpaperItem>>()
@@ -31,7 +35,22 @@ class FolderRepository @Inject constructor(
     private fun itemsCacheKey(folderUri: String, type: FolderType) = "$folderUri\u0000${type.name}"
     fun getAllFolders(): Flow<List<FolderEntity>> = folderDao.getAll()
 
-    fun getFoldersByType(type: FolderType): Flow<List<FolderEntity>> = folderDao.getByType(type)
+    /**
+     * UI folder lists. When hide-mode is on and "show hidden" is off, privacy-marked
+     * folders are omitted. Wallpaper / timers still resolve by URI.
+     */
+    fun getFoldersByType(type: FolderType): Flow<List<FolderEntity>> =
+        combine(
+            folderDao.getByType(type),
+            prefs.folderHideMode,
+            prefs.showHiddenFolders
+        ) { all, hideMode, showHidden ->
+            if (!hideMode || showHidden) all
+            else all.filter { !it.hidden }
+        }.distinctUntilChanged()
+
+    /** Privacy-marked folders only. */
+    fun getMarkedFolders(): Flow<List<FolderEntity>> = folderDao.getMarked()
 
     suspend fun addFolder(uri: Uri, type: FolderType): Long {
         val displayName = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "Folder"
@@ -50,6 +69,11 @@ class FolderRepository @Inject constructor(
     suspend fun removeFolder(folder: FolderEntity) {
         invalidateItemsCache(folder.uri, folder.type)
         folderDao.delete(folder)
+    }
+
+    /** Set privacy mark (eligible to hide when hide-mode tile is on). */
+    suspend fun setFolderPrivacyMark(folder: FolderEntity, marked: Boolean) {
+        folderDao.setHidden(folder.id, marked)
     }
 
     /** Drop cached listings. Pass both args to clear one folder+type; omit to clear all. */

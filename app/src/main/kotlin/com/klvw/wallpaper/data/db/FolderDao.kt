@@ -15,11 +15,21 @@ interface FolderDao {
     @Query("SELECT * FROM folders ORDER BY addedAt DESC")
     fun getAll(): Flow<List<FolderEntity>>
 
-    @Query("SELECT * FROM folders WHERE type = :type ORDER BY lastUsed DESC, addedAt DESC")
+    /** All folders of [type], including privacy-marked. Visibility is filtered in repository. */
+    @Query(
+        "SELECT * FROM folders WHERE type = :type " +
+            "ORDER BY hidden ASC, lastUsed DESC, addedAt DESC"
+    )
     fun getByType(type: FolderType): Flow<List<FolderEntity>>
+
+    @Query("SELECT * FROM folders WHERE hidden = 1 ORDER BY type ASC, addedAt DESC")
+    fun getMarked(): Flow<List<FolderEntity>>
 
     @Query("UPDATE folders SET lastUsed = :time WHERE id = :id")
     suspend fun updateLastUsed(id: Long, time: Long = System.currentTimeMillis())
+
+    @Query("UPDATE folders SET hidden = :hidden WHERE id = :id")
+    suspend fun setHidden(id: Long, hidden: Boolean)
 
     @Query("SELECT * FROM folders WHERE uri = :uri LIMIT 1")
     suspend fun findByUri(uri: String): FolderEntity?

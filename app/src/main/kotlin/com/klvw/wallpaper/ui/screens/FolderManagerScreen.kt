@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -110,11 +112,30 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
             )
         }
 
+        Text(
+            "眼睛图标：打/取消隐私标记。用「文件夹隐藏」磁贴一键隐藏已标记项；关于连点 8 次可打开「显示隐藏」。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        if (state.folderHideMode) {
+            Text(
+                if (state.showHiddenFolders)
+                    "隐藏模式已开 · 已开启「显示隐藏文件夹」"
+                else
+                    "隐藏模式已开 · 带隐私标记的文件夹已从列表隐藏（壁纸仍可用）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+
         if (state.imageFolders.isNotEmpty()) {
             FolderSection(
                 title = "图片文件夹",
                 folders = state.imageFolders,
-                onRemove = { viewModel.removeFolder(it) }
+                onRemove = { viewModel.removeFolder(it) },
+                onToggleMark = { viewModel.setFolderPrivacyMark(it, !it.hidden) }
             )
         }
 
@@ -122,7 +143,8 @@ fun FolderManagerScreen(viewModel: WallpaperViewModel) {
             FolderSection(
                 title = "视频文件夹",
                 folders = state.videoFolders,
-                onRemove = { viewModel.removeFolder(it) }
+                onRemove = { viewModel.removeFolder(it) },
+                onToggleMark = { viewModel.setFolderPrivacyMark(it, !it.hidden) }
             )
         }
 
@@ -282,7 +304,8 @@ private fun AddFolderButton(
 private fun FolderSection(
     title: String,
     folders: List<FolderEntity>,
-    onRemove: (FolderEntity) -> Unit
+    onRemove: (FolderEntity) -> Unit,
+    onToggleMark: ((FolderEntity) -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -292,13 +315,21 @@ private fun FolderSection(
             modifier = Modifier.padding(horizontal = 4.dp)
         )
         folders.forEach { folder ->
-            FolderItem(folder = folder, onRemove = { onRemove(folder) })
+            FolderItem(
+                folder = folder,
+                onRemove = { onRemove(folder) },
+                onToggleMark = onToggleMark?.let { { it(folder) } }
+            )
         }
     }
 }
 
 @Composable
-private fun FolderItem(folder: FolderEntity, onRemove: () -> Unit) {
+private fun FolderItem(
+    folder: FolderEntity,
+    onRemove: () -> Unit,
+    onToggleMark: (() -> Unit)? = null
+) {
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
     val isAer = folder.uri.startsWith("klvw-aer://")
     Row(
@@ -324,11 +355,25 @@ private fun FolderItem(folder: FolderEntity, onRemove: () -> Unit) {
             Text(folder.displayName, style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (isAer) "Aer private storage"
-                else "Added ${dateFormat.format(Date(folder.addedAt))}",
+                when {
+                    folder.hidden -> "已打隐私标记 · 隐藏模式开启后从列表消失"
+                    isAer -> "Aer private storage"
+                    else -> "Added ${dateFormat.format(Date(folder.addedAt))}"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+        if (onToggleMark != null) {
+            IconButton(onClick = onToggleMark, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    if (folder.hidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (folder.hidden) "取消隐私标记" else "打隐私标记",
+                    tint = if (folder.hidden) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
         IconButton(onClick = onRemove, modifier = Modifier.size(40.dp)) {
             Icon(Icons.Default.Delete, contentDescription = "移除",

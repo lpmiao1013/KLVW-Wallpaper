@@ -69,6 +69,11 @@ data class WallpaperUiState(
     val presetLockUri: String? = null,
     val presetLockIsVideo: Boolean = false,
     val presetLockSource: String = "file",
+    /** QS tile: hide privacy-marked folders from UI. */
+    val folderHideMode: Boolean = false,
+    /** After About 8-tap switch: show marked folders even in hide mode. */
+    val showHiddenFolders: Boolean = false,
+    val markedFolders: List<FolderEntity> = emptyList(),
 )
 
 @HiltViewModel
@@ -256,6 +261,19 @@ class WallpaperViewModel @Inject constructor(
                     }
                 }
         }
+
+        viewModelScope.launch {
+            combine(prefs.folderHideMode, prefs.showHiddenFolders) { hide, show ->
+                hide to show
+            }.collect { (hide, show) ->
+                _state.update { it.copy(folderHideMode = hide, showHiddenFolders = show) }
+            }
+        }
+        viewModelScope.launch {
+            folderRepository.getMarkedFolders().collect { list ->
+                _state.update { it.copy(markedFolders = list) }
+            }
+        }
     }
 
     /** Lock picker to the active schedule folder for the current target. */
@@ -421,6 +439,56 @@ class WallpaperViewModel @Inject constructor(
 
     fun removeFolder(folder: FolderEntity) {
         viewModelScope.launch { folderRepository.removeFolder(folder) }
+    }
+
+    fun setFolderPrivacyMark(folder: FolderEntity, marked: Boolean) {
+        viewModelScope.launch {
+            folderRepository.setFolderPrivacyMark(folder, marked)
+            // If hide-mode is on and we just marked the current picker folder, leave it.
+            if (marked && _state.value.folderHideMode && !_state.value.showHiddenFolders &&
+                _state.value.selectedFolderUri == folder.uri
+            ) {
+                clearPickerIfSelected(folder)
+            }
+        }
+    }
+
+    fun setFolderHideMode(enabled: Boolean) {
+        viewModelScope.launch {
+            prefs.setFolderHideMode(enabled)
+            if (enabled && !_state.value.showHiddenFolders) {
+                val sel = _state.value.selectedFolderUri
+                val marked = _state.value.markedFolders.find { it.uri == sel }
+                if (marked != null) clearPickerIfSelected(marked)
+            }
+        }
+    }
+
+    fun setShowHiddenFolders(show: Boolean) {
+        viewModelScope.launch { prefs.setShowHiddenFolders(show) }
+    }
+
+    private suspend fun clearPickerIfSelected(folder: FolderEntity) {
+        if (_state.value.selectedFolderUri != folder.uri) return
+        val next = when (folder.type) {
+            FolderType.IMAGE -> _state.value.imageFolders.firstOrNull { it.uri != folder.uri && !it.hidden }
+            FolderType.VIDEO -> _state.value.videoFolders.firstOrNull { it.uri != folder.uri && !it.hidden }
+        }
+        if (folder.type == FolderType.IMAGE) {
+            savedImageFolderUri = next?.uri
+            prefs.setActiveImageFolder(next?.uri)
+        } else {
+            savedVideoFolderUri = next?.uri
+            prefs.setActiveVideoFolder(next?.uri)
+        }
+        _state.update {
+            it.copy(
+                selectedFolderUri = next?.uri,
+                previewItems = emptyList(),
+                isLoadingPreview = next != null
+            )
+        }
+        if (next != null) loadPreviewItems(clearFirst = true)
     }
 
     fun addStaticImage(uri: Uri, displayName: String) {

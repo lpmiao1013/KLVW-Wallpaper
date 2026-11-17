@@ -9,4 +9,5 @@
     <string name="klvw_popup_tile_label">KLVW</string>
     <string name="quick_set_tile_label">KLVW 快捷设置</string>
     <string name="preset_tile_label">KLVW 预设</string>
+    <string name="folder_hide_tile_label">文件夹隐藏</string>
 </resources>

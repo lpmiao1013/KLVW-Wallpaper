@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -55,11 +56,20 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSharpnessLogs by remember { mutableStateOf(false) }
+    var showHiddenFoldersPanel by remember { mutableStateOf(false) }
+    var aboutTapCount by remember { mutableStateOf(0) }
+    var aboutTapWindowMs by remember { mutableStateOf(0L) }
 
     if (showSharpnessLogs) {
         SharpnessLogDialog(
             viewModel = viewModel,
             onDismiss = { showSharpnessLogs = false }
+        )
+    }
+    if (showHiddenFoldersPanel) {
+        ShowHiddenFoldersDialog(
+            viewModel = viewModel,
+            onDismiss = { showHiddenFoldersPanel = false }
         )
     }
 
@@ -205,6 +215,17 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(SurfaceGlass)
+                    .clickable {
+                        val now = System.currentTimeMillis()
+                        val next = if (now - aboutTapWindowMs > 2500L) 1 else aboutTapCount + 1
+                        aboutTapWindowMs = now
+                        aboutTapCount = next
+                        if (next >= 8) {
+                            aboutTapCount = 0
+                            showHiddenFoldersPanel = true
+                            Toast.makeText(context, "已打开隐藏文件夹显示设置", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                     .padding(16.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2029,5 +2050,111 @@ private fun AerStorageSection(popupViewModel: KLVWPopupViewModel) {
                 TextButton(onClick = { showAutoUnmountDialog = false }) { Text("取消") }
             }
         )
+    }
+}
+
+@Composable
+private fun ShowHiddenFoldersDialog(
+    viewModel: WallpaperViewModel,
+    onDismiss: () -> Unit
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("显示隐藏文件夹") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "隐藏模式由「文件夹隐藏」磁贴控制。开启下方开关后，即使处于隐藏模式也会在列表中显示带隐私标记的文件夹。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("显示隐藏文件夹", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (state.folderHideMode) "当前隐藏模式：开" else "当前隐藏模式：关",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = state.showHiddenFolders,
+                        onCheckedChange = { viewModel.setShowHiddenFolders(it) }
+                    )
+                }
+                OutlinedButton(
+                    onClick = {
+                        requestAddFolderHideTile(context) { msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("添加「文件夹隐藏」磁贴")
+                }
+                if (state.markedFolders.isNotEmpty()) {
+                    Text(
+                        "已标记 ${state.markedFolders.size} 个文件夹",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    state.markedFolders.forEach { folder ->
+                        Text(
+                            "· ${folder.displayName}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+private fun requestAddFolderHideTile(context: android.content.Context, onMsg: (String) -> Unit) {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+        onMsg("请下拉快捷设置 → 编辑，手动添加「文件夹隐藏」")
+        return
+    }
+    try {
+        val sbm = context.getSystemService(android.app.StatusBarManager::class.java) ?: run {
+            onMsg("无法打开磁贴添加面板")
+            return
+        }
+        val component = android.content.ComponentName(
+            context,
+            com.klvw.wallpaper.tile.FolderHideTileService::class.java
+        )
+        val icon = android.graphics.drawable.Icon.createWithResource(
+            context,
+            com.klvw.wallpaper.R.drawable.ic_qs_folder_hide
+        )
+        val executor = java.util.concurrent.Executor { it.run() }
+        sbm.requestAddTileService(
+            component,
+            context.getString(com.klvw.wallpaper.R.string.folder_hide_tile_label),
+            icon,
+            executor
+        ) { result ->
+            val msg = when (result) {
+                android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ->
+                    "已添加文件夹隐藏磁贴"
+                android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED ->
+                    "磁贴已在快捷设置中"
+                android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED ->
+                    "未添加（可稍后在系统编辑页添加）"
+                else -> "请在系统快捷设置编辑页中添加「文件夹隐藏」"
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post { onMsg(msg) }
+        }
+    } catch (_: Exception) {
+        onMsg("请下拉快捷设置 → 编辑，手动添加「文件夹隐藏」")
     }
 }

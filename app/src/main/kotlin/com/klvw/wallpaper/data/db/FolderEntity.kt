@@ -11,5 +11,10 @@ data class FolderEntity(
     val displayName: String,
     val type: FolderType,
     val addedAt: Long = System.currentTimeMillis(),
-    val lastUsed: Long = 0L
+    val lastUsed: Long = 0L,
+    /**
+     * Privacy mark: when global folder-hide mode is on (QS tile), this folder is
+     * omitted from UI lists. Wallpaper by URI still works.
+     */
+    val hidden: Boolean = false
 )

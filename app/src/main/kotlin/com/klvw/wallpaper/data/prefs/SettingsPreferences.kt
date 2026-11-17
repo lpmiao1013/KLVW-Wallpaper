@@ -134,6 +134,10 @@ class SettingsPreferences @Inject constructor(
         /** file | folder */
         val PRESET_LOCK_SOURCE = stringPreferencesKey("preset_lock_source")
         val PRESET_HISTORY_JSON = stringPreferencesKey("preset_history_json")
+        // When true, privacy-marked folders are hidden from UI (QS tile).
+        val FOLDER_HIDE_MODE = booleanPreferencesKey("folder_hide_mode")
+        // After About 8-tap: show marked folders even while hide mode is on.
+        val SHOW_HIDDEN_FOLDERS = booleanPreferencesKey("show_hidden_folders")
     }
 
     // Raw flows — distinctUntilChanged so writes to unrelated keys don't trigger re-emission
@@ -210,6 +214,12 @@ class SettingsPreferences @Inject constructor(
         .distinctUntilChanged()
     val presetHistoryJson: Flow<String?> = context.dataStore.data
         .map { it[Keys.PRESET_HISTORY_JSON] }
+        .distinctUntilChanged()
+    val folderHideMode: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.FOLDER_HIDE_MODE] ?: false }
+        .distinctUntilChanged()
+    val showHiddenFolders: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.SHOW_HIDDEN_FOLDERS] ?: false }
         .distinctUntilChanged()
     val popupLayout: Flow<String> = context.dataStore.data.map { it[Keys.POPUP_LAYOUT] ?: "list" }.distinctUntilChanged()
     val popupGridColumns: Flow<Int> = context.dataStore.data.map { it[Keys.POPUP_GRID_COLUMNS] ?: 3 }.distinctUntilChanged()
@@ -790,5 +800,13 @@ class SettingsPreferences @Inject constructor(
             if (json.isNullOrBlank()) it.remove(Keys.PRESET_HISTORY_JSON)
             else it[Keys.PRESET_HISTORY_JSON] = json
         }
+    }
+
+    suspend fun setFolderHideMode(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.FOLDER_HIDE_MODE] = enabled }
+    }
+
+    suspend fun setShowHiddenFolders(show: Boolean) {
+        context.dataStore.edit { it[Keys.SHOW_HIDDEN_FOLDERS] = show }
     }
 }
