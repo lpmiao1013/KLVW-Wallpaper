@@ -53,9 +53,6 @@ class VideoRenderer(
     private val displayUtils: DisplayUtils,
     private val sharpnessLogStore: SharpnessLogStore? = null
 ) {
-    companion object {
-        private const val TAG = "KLVW-Sharpness"
-    }
     private val generation = AtomicInteger(0)
 
     @Volatile private var player: ExoPlayer? = null
@@ -99,6 +96,8 @@ class VideoRenderer(
     private val texMatrix = FloatArray(16)
 
     companion object {
+        private const val TAG = "KLVW-Sharpness"
+
         /**
          * Extra 90° UV turn for orientation mismatch — same matrices as
          * WallpaperSwitcher (column-major):
