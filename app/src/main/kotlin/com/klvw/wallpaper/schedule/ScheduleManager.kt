@@ -123,6 +123,12 @@ class ScheduleManager @Inject constructor(
         else -> null
     }
 
+    /** Whether QS tile / enable is allowed: active group exists and validates. */
+    suspend fun canUseScheduleTile(): Boolean {
+        val group = activeGroup() ?: return false
+        return ScheduleMath.validateGroup(group.rules) == null
+    }
+
     /**
      * Enable only when active group validates; returns error toast text or null on success.
      */

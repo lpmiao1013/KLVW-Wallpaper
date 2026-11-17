@@ -1,6 +1,11 @@
 package com.klvw.wallpaper.ui.screens
 
+import android.app.StatusBarManager
+import android.content.ComponentName
 import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddToHomeScreen
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -59,14 +65,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.klvw.wallpaper.R
 import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.ScheduleGroup
 import com.klvw.wallpaper.data.model.ScheduleRule
 import com.klvw.wallpaper.data.model.WallpaperTarget
 import com.klvw.wallpaper.schedule.ScheduleMath
+import com.klvw.wallpaper.tile.ScheduleTileService
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 import com.klvw.wallpaper.util.PermissionUtils
 import java.util.UUID
+import java.util.concurrent.Executor
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
@@ -120,6 +129,31 @@ fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
                         if (err != null) toast(err)
                     }
                 }
+            )
+        }
+
+        val canAddScheduleTile = remember(activeId, groups) {
+            val g = groups.find { it.id == activeId } ?: return@remember false
+            ScheduleMath.validateGroup(g.rules) == null
+        }
+        OutlinedButton(
+            onClick = {
+                if (!canAddScheduleTile) {
+                    toast("请先选择并保存一个完整时段分组")
+                    return@OutlinedButton
+                }
+                requestAddScheduleTile(context) { toast(it) }
+            },
+            enabled = canAddScheduleTile,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+        ) {
+            Icon(Icons.Default.AddToHomeScreen, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (canAddScheduleTile) "添加「时段方案」磁贴"
+                else "请先选中完整分组后再添加磁贴"
             )
         }
 
@@ -879,5 +913,37 @@ private fun NumberWheel(
             thickness = 0.5.dp,
             color = MaterialTheme.colorScheme.outlineVariant
         )
+    }
+}
+
+private fun requestAddScheduleTile(context: android.content.Context, onMsg: (String) -> Unit) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        onMsg("请下拉快捷设置 → 编辑，手动添加「时段方案」")
+        return
+    }
+    try {
+        val sbm = context.getSystemService(StatusBarManager::class.java) ?: run {
+            onMsg("无法打开磁贴添加面板")
+            return
+        }
+        val component = ComponentName(context, ScheduleTileService::class.java)
+        val icon = android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_qs_schedule)
+        val executor = Executor { it.run() }
+        sbm.requestAddTileService(
+            component,
+            context.getString(R.string.schedule_tile_label),
+            icon,
+            executor
+        ) { result ->
+            val msg = when (result) {
+                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "已添加时段方案磁贴"
+                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "磁贴已在快捷设置中"
+                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "未添加（可稍后在系统编辑页添加）"
+                else -> "请在系统快捷设置编辑页中添加「时段方案」"
+            }
+            Handler(Looper.getMainLooper()).post { onMsg(msg) }
+        }
+    } catch (_: Exception) {
+        onMsg("请下拉快捷设置 → 编辑，手动添加「时段方案」")
     }
 }

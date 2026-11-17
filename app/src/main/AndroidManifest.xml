@@ -310,6 +310,21 @@
                 android:value="true" />
         </service>
 
+        <!-- Schedule QS tile — toggle daily schedule enable only. -->
+        <service
+            android:name=".tile.ScheduleTileService"
+            android:exported="true"
+            android:label="@string/schedule_tile_label"
+            android:icon="@drawable/ic_qs_schedule"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
+        </service>
+
         <!-- Quick Set execution activity — tile tap + com.klvw.wallpaper.QUICK_SET intent.
              Executes configured action when global is ON; silently finishes when OFF. -->
         <activity
