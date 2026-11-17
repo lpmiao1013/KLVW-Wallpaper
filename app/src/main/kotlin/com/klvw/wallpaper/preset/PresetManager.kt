@@ -5,6 +5,8 @@ import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.model.WallpaperTarget
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
+import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
+import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,14 +14,16 @@ import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 
 /**
- * Highest-priority scene preset: fixed home/lock file (image XOR video each).
+ * Highest-priority scene preset: home/lock each pick image XOR video, from a file or folder.
  * When active, schedule auto-apply is suspended; timers / double-tap / scale still work.
- * Disable restores the config snapshot taken at enable (not a specific shuffled file).
+ * Folder source also feeds [resolveFolderUri] for timers while preset is on.
  */
 @Singleton
 class PresetManager @Inject constructor(
     private val prefs: SettingsPreferences,
-    private val wallpaperRepository: WallpaperRepository
+    private val wallpaperRepository: WallpaperRepository,
+    private val folderRepository: FolderRepository,
+    private val shuffleHistoryManager: ShuffleHistoryManager
 ) {
     suspend fun isActive(): Boolean = prefs.presetEnabled.first()
 
@@ -27,17 +31,12 @@ class PresetManager @Inject constructor(
      * Enable preset. Returns error toast text, or null on success.
      */
     suspend fun enable(): String? {
-        val homeUri = prefs.presetHomeUri.first()
-        val lockUri = prefs.presetLockUri.first()
-        if (homeUri.isNullOrBlank()) return "请先配置桌面预设文件"
-        if (lockUri.isNullOrBlank()) return "请先配置锁屏预设文件"
-        if (isActive()) {
-            applyPresetWallpapers()
-            return null
+        validateConfigured()?.let { return it }
+        if (!isActive()) {
+            prefs.setPresetHistoryJson(captureHistory().toString())
+            prefs.setPresetEnabled(true)
         }
-        prefs.setPresetHistoryJson(captureHistory().toString())
-        prefs.setPresetEnabled(true)
-        applyPresetWallpapers()
+        applyPresetWallpapers()?.let { return it }
         alignMutex(WallpaperTarget.HOME, prefs.presetHomeIsVideo.first())
         alignMutex(WallpaperTarget.LOCK, prefs.presetLockIsVideo.first())
         return null
@@ -54,9 +53,7 @@ class PresetManager @Inject constructor(
         if (history != null) {
             prefs.setScheduleActiveGroupId(history.scheduleActiveGroupId)
             prefs.setScheduleEnabled(history.scheduleEnabled)
-            if (history.scheduleEnabled) {
-                // ScheduleManager watches scheduleEnabled + presetEnabled and will re-apply.
-            } else {
+            if (!history.scheduleEnabled) {
                 if (!history.homeUri.isNullOrBlank()) {
                     prefs.setHomeWallpaper(history.homeUri, history.homeIsVideo)
                 }
@@ -72,29 +69,83 @@ class PresetManager @Inject constructor(
     suspend fun toggle(): String? =
         if (isActive()) disable() else enable()
 
-    private suspend fun applyPresetWallpapers() {
-        val homeUri = prefs.presetHomeUri.first() ?: return
-        val homeVideo = prefs.presetHomeIsVideo.first()
-        val lockUri = prefs.presetLockUri.first() ?: return
-        val lockVideo = prefs.presetLockIsVideo.first()
-        wallpaperRepository.setWallpaper(
-            WallpaperItem(
-                Uri.parse(homeUri),
-                if (homeVideo) FolderType.VIDEO else FolderType.IMAGE,
-                "preset_home",
-                ""
-            ),
-            WallpaperTarget.HOME
-        )
-        wallpaperRepository.setWallpaper(
-            WallpaperItem(
-                Uri.parse(lockUri),
-                if (lockVideo) FolderType.VIDEO else FolderType.IMAGE,
-                "preset_lock",
-                ""
-            ),
-            WallpaperTarget.LOCK
-        )
+    /**
+     * While preset is active and that screen uses a folder source with matching media,
+     * return the preset folder for timers / double-tap.
+     */
+    suspend fun resolveFolderUri(target: WallpaperTarget, type: FolderType): String? {
+        if (!isActive()) return null
+        if (target != WallpaperTarget.HOME && target != WallpaperTarget.LOCK) return null
+        val isVideo = type == FolderType.VIDEO
+        val (source, uri, configuredVideo) = when (target) {
+            WallpaperTarget.HOME -> Triple(
+                prefs.presetHomeSource.first(),
+                prefs.presetHomeUri.first(),
+                prefs.presetHomeIsVideo.first()
+            )
+            WallpaperTarget.LOCK -> Triple(
+                prefs.presetLockSource.first(),
+                prefs.presetLockUri.first(),
+                prefs.presetLockIsVideo.first()
+            )
+            else -> return null
+        }
+        if (source != "folder") return null
+        if (configuredVideo != isVideo) return null
+        return uri?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun validateConfigured(): String? {
+        val homeUri = prefs.presetHomeUri.first()
+        val lockUri = prefs.presetLockUri.first()
+        val homeSrc = prefs.presetHomeSource.first()
+        val lockSrc = prefs.presetLockSource.first()
+        if (homeUri.isNullOrBlank()) {
+            return if (homeSrc == "folder") "请先配置桌面预设文件夹" else "请先配置桌面预设文件"
+        }
+        if (lockUri.isNullOrBlank()) {
+            return if (lockSrc == "folder") "请先配置锁屏预设文件夹" else "请先配置锁屏预设文件"
+        }
+        return null
+    }
+
+    private suspend fun applyPresetWallpapers(): String? {
+        applySide(
+            WallpaperTarget.HOME,
+            prefs.presetHomeIsVideo.first(),
+            prefs.presetHomeSource.first(),
+            prefs.presetHomeUri.first()
+        )?.let { return it }
+        applySide(
+            WallpaperTarget.LOCK,
+            prefs.presetLockIsVideo.first(),
+            prefs.presetLockSource.first(),
+            prefs.presetLockUri.first()
+        )?.let { return it }
+        return null
+    }
+
+    private suspend fun applySide(
+        target: WallpaperTarget,
+        isVideo: Boolean,
+        source: String,
+        uri: String?
+    ): String? {
+        if (uri.isNullOrBlank()) return "预设路径无效"
+        val type = if (isVideo) FolderType.VIDEO else FolderType.IMAGE
+        val label = if (target == WallpaperTarget.LOCK) "锁屏" else "桌面"
+        if (source == "folder") {
+            val items = folderRepository.getItemsFromFolder(uri, type)
+            val item = shuffleHistoryManager.pickNext(items, uri, type)
+                ?: return "${label}预设文件夹为空"
+            wallpaperRepository.setWallpaper(item, target)
+        } else {
+            wallpaperRepository.setWallpaper(
+                WallpaperItem(Uri.parse(uri), type, "preset_$label", ""),
+                target
+            )
+        }
+        return null
     }
 
     private suspend fun captureHistory(): JSONObject = JSONObject().apply {
@@ -123,7 +174,6 @@ class PresetManager @Inject constructor(
         null
     }
 
-    /** Keep display-control / timer mutex aligned with the media type in use. */
     private suspend fun alignMutex(target: WallpaperTarget, isVideo: Boolean) {
         val screen = if (target == WallpaperTarget.LOCK) "lock" else "home"
         val imageKey = "${screen}_image"

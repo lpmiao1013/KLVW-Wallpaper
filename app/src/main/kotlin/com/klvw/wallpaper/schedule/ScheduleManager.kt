@@ -12,8 +12,10 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.preset.PresetManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +35,8 @@ class ScheduleManager @Inject constructor(
     private val prefs: SettingsPreferences,
     private val folderRepository: FolderRepository,
     private val wallpaperRepository: WallpaperRepository,
-    private val shuffleHistoryManager: ShuffleHistoryManager
+    private val shuffleHistoryManager: ShuffleHistoryManager,
+    private val presetManager: Provider<PresetManager>
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -94,11 +97,13 @@ class ScheduleManager @Inject constructor(
 
     /**
      * Folder for timers / double-tap / picker.
+     * Preset folder source (while active) → that folder when media matches.
      * Schedule on (and preset off) → current window folder only when [type] matches; else null.
      * Otherwise → default folder for [target]+[type].
      */
     suspend fun resolveFolderUri(target: WallpaperTarget, type: FolderType): String? {
         if (target != WallpaperTarget.HOME && target != WallpaperTarget.LOCK) return null
+        presetManager.get().resolveFolderUri(target, type)?.let { return it }
         if (isEnabled()) {
             val rule = currentRule(target) ?: return null
             return if (rule.media == type) rule.folderUri else null

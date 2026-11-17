@@ -127,8 +127,12 @@ class SettingsPreferences @Inject constructor(
         val PRESET_ENABLED = booleanPreferencesKey("preset_enabled")
         val PRESET_HOME_URI = stringPreferencesKey("preset_home_uri")
         val PRESET_HOME_IS_VIDEO = booleanPreferencesKey("preset_home_is_video")
+        /** file | folder */
+        val PRESET_HOME_SOURCE = stringPreferencesKey("preset_home_source")
         val PRESET_LOCK_URI = stringPreferencesKey("preset_lock_uri")
         val PRESET_LOCK_IS_VIDEO = booleanPreferencesKey("preset_lock_is_video")
+        /** file | folder */
+        val PRESET_LOCK_SOURCE = stringPreferencesKey("preset_lock_source")
         val PRESET_HISTORY_JSON = stringPreferencesKey("preset_history_json")
     }
 
@@ -192,11 +196,17 @@ class SettingsPreferences @Inject constructor(
     val presetHomeIsVideo: Flow<Boolean> = context.dataStore.data
         .map { it[Keys.PRESET_HOME_IS_VIDEO] ?: false }
         .distinctUntilChanged()
+    val presetHomeSource: Flow<String> = context.dataStore.data
+        .map { it[Keys.PRESET_HOME_SOURCE] ?: "file" }
+        .distinctUntilChanged()
     val presetLockUri: Flow<String?> = context.dataStore.data
         .map { it[Keys.PRESET_LOCK_URI] }
         .distinctUntilChanged()
     val presetLockIsVideo: Flow<Boolean> = context.dataStore.data
         .map { it[Keys.PRESET_LOCK_IS_VIDEO] ?: false }
+        .distinctUntilChanged()
+    val presetLockSource: Flow<String> = context.dataStore.data
+        .map { it[Keys.PRESET_LOCK_SOURCE] ?: "file" }
         .distinctUntilChanged()
     val presetHistoryJson: Flow<String?> = context.dataStore.data
         .map { it[Keys.PRESET_HISTORY_JSON] }
@@ -743,19 +753,35 @@ class SettingsPreferences @Inject constructor(
         context.dataStore.edit { it[Keys.PRESET_ENABLED] = enabled }
     }
 
-    suspend fun setPresetHome(uri: String?, isVideo: Boolean) {
+    suspend fun setPresetHome(uri: String?, isVideo: Boolean, source: String? = null) {
         context.dataStore.edit {
             if (uri.isNullOrBlank()) it.remove(Keys.PRESET_HOME_URI)
             else it[Keys.PRESET_HOME_URI] = uri
             it[Keys.PRESET_HOME_IS_VIDEO] = isVideo
+            if (source != null) it[Keys.PRESET_HOME_SOURCE] = source
         }
     }
 
-    suspend fun setPresetLock(uri: String?, isVideo: Boolean) {
+    suspend fun setPresetLock(uri: String?, isVideo: Boolean, source: String? = null) {
         context.dataStore.edit {
             if (uri.isNullOrBlank()) it.remove(Keys.PRESET_LOCK_URI)
             else it[Keys.PRESET_LOCK_URI] = uri
             it[Keys.PRESET_LOCK_IS_VIDEO] = isVideo
+            if (source != null) it[Keys.PRESET_LOCK_SOURCE] = source
+        }
+    }
+
+    suspend fun setPresetHomeSource(source: String) {
+        context.dataStore.edit {
+            it[Keys.PRESET_HOME_SOURCE] = source
+            it.remove(Keys.PRESET_HOME_URI)
+        }
+    }
+
+    suspend fun setPresetLockSource(source: String) {
+        context.dataStore.edit {
+            it[Keys.PRESET_LOCK_SOURCE] = source
+            it.remove(Keys.PRESET_LOCK_URI)
         }
     }
 

@@ -65,8 +65,10 @@ data class WallpaperUiState(
     val presetEnabled: Boolean = false,
     val presetHomeUri: String? = null,
     val presetHomeIsVideo: Boolean = false,
+    val presetHomeSource: String = "file",
     val presetLockUri: String? = null,
     val presetLockIsVideo: Boolean = false,
+    val presetLockSource: String = "file",
 )
 
 @HiltViewModel
@@ -218,27 +220,41 @@ class WallpaperViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            combine(
-                combine(
-                    prefs.presetEnabled,
-                    prefs.presetHomeUri,
-                    prefs.presetHomeIsVideo
-                ) { enabled, homeUri, homeVideo -> Triple(enabled, homeUri, homeVideo) },
-                combine(
-                    prefs.presetLockUri,
-                    prefs.presetLockIsVideo
-                ) { lockUri, lockVideo -> lockUri to lockVideo }
-            ) { home, lock -> home to lock }.collect { (home, lock) ->
-                _state.update {
-                    it.copy(
-                        presetEnabled = home.first,
-                        presetHomeUri = home.second,
-                        presetHomeIsVideo = home.third,
-                        presetLockUri = lock.first,
-                        presetLockIsVideo = lock.second
-                    )
-                }
+            prefs.presetEnabled.collect { enabled ->
+                _state.update { it.copy(presetEnabled = enabled) }
             }
+        }
+        viewModelScope.launch {
+            combine(
+                prefs.presetHomeUri,
+                prefs.presetHomeIsVideo,
+                prefs.presetHomeSource
+            ) { uri, isVideo, source -> Triple(uri, isVideo, source) }
+                .collect { (uri, isVideo, source) ->
+                    _state.update {
+                        it.copy(
+                            presetHomeUri = uri,
+                            presetHomeIsVideo = isVideo,
+                            presetHomeSource = source
+                        )
+                    }
+                }
+        }
+        viewModelScope.launch {
+            combine(
+                prefs.presetLockUri,
+                prefs.presetLockIsVideo,
+                prefs.presetLockSource
+            ) { uri, isVideo, source -> Triple(uri, isVideo, source) }
+                .collect { (uri, isVideo, source) ->
+                    _state.update {
+                        it.copy(
+                            presetLockUri = uri,
+                            presetLockIsVideo = isVideo,
+                            presetLockSource = source
+                        )
+                    }
+                }
         }
     }
 
@@ -451,25 +467,34 @@ class WallpaperViewModel @Inject constructor(
 
     // ── Scene preset ────────────────────────────────────────────────
 
-    fun setPresetHome(uri: String?, isVideo: Boolean) {
-        viewModelScope.launch { prefs.setPresetHome(uri, isVideo) }
+    fun setPresetHome(uri: String?, isVideo: Boolean, source: String? = null) {
+        viewModelScope.launch { prefs.setPresetHome(uri, isVideo, source) }
     }
 
-    fun setPresetLock(uri: String?, isVideo: Boolean) {
-        viewModelScope.launch { prefs.setPresetLock(uri, isVideo) }
+    fun setPresetLock(uri: String?, isVideo: Boolean, source: String? = null) {
+        viewModelScope.launch { prefs.setPresetLock(uri, isVideo, source) }
     }
 
     fun setPresetHomeMedia(isVideo: Boolean) {
         viewModelScope.launch {
-            // Switching type clears the previous file so MIME matches.
-            prefs.setPresetHome(null, isVideo)
+            val src = prefs.presetHomeSource.first()
+            prefs.setPresetHome(null, isVideo, src)
         }
     }
 
     fun setPresetLockMedia(isVideo: Boolean) {
         viewModelScope.launch {
-            prefs.setPresetLock(null, isVideo)
+            val src = prefs.presetLockSource.first()
+            prefs.setPresetLock(null, isVideo, src)
         }
+    }
+
+    fun setPresetHomeSource(source: String) {
+        viewModelScope.launch { prefs.setPresetHomeSource(source) }
+    }
+
+    fun setPresetLockSource(source: String) {
+        viewModelScope.launch { prefs.setPresetLockSource(source) }
     }
 
     fun enablePreset(onResult: (String?) -> Unit = {}) {
