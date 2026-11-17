@@ -470,9 +470,11 @@ class WallpaperViewModel @Inject constructor(
 
     private suspend fun clearPickerIfSelected(folder: FolderEntity) {
         if (_state.value.selectedFolderUri != folder.uri) return
+        if (folder.type == FolderType.STATIC) return
         val next = when (folder.type) {
             FolderType.IMAGE -> _state.value.imageFolders.firstOrNull { it.uri != folder.uri && !it.hidden }
             FolderType.VIDEO -> _state.value.videoFolders.firstOrNull { it.uri != folder.uri && !it.hidden }
+            FolderType.STATIC -> null
         }
         if (folder.type == FolderType.IMAGE) {
             savedImageFolderUri = next?.uri
