@@ -33,8 +33,13 @@ class SettingsPreferences @Inject constructor(
         val WALLPAPER_SCALE_MODE = stringPreferencesKey("wallpaper_scale_mode")
         val ROTATE_MISMATCH_ENABLED = booleanPreferencesKey("rotate_mismatch_enabled")
         val ROTATE_MISMATCH_CW = booleanPreferencesKey("rotate_mismatch_cw")
+        /** Legacy shared tabbar keys — migrated into HOME_* on read. */
         val ACTIVE_IMAGE_FOLDER_URI = stringPreferencesKey("active_image_folder_uri")
         val ACTIVE_VIDEO_FOLDER_URI = stringPreferencesKey("active_video_folder_uri")
+        val ACTIVE_HOME_IMAGE_FOLDER_URI = stringPreferencesKey("active_home_image_folder_uri")
+        val ACTIVE_HOME_VIDEO_FOLDER_URI = stringPreferencesKey("active_home_video_folder_uri")
+        val ACTIVE_LOCK_IMAGE_FOLDER_URI = stringPreferencesKey("active_lock_image_folder_uri")
+        val ACTIVE_LOCK_VIDEO_FOLDER_URI = stringPreferencesKey("active_lock_video_folder_uri")
         val LOCK_SERVICE_ACTIVATED = booleanPreferencesKey("lock_service_activated")
         val FORCE_ICON_COLOR = stringPreferencesKey("force_icon_color")
         val PREV_HOME_WALLPAPER_URI = stringPreferencesKey("prev_home_wallpaper_uri")
@@ -159,8 +164,67 @@ class SettingsPreferences @Inject constructor(
         .map { it[Keys.ROTATE_MISMATCH_CW] ?: true }
         .distinctUntilChanged()
     val lockServiceActivated: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_SERVICE_ACTIVATED] ?: false }.distinctUntilChanged()
-    val activeImageFolderUri: Flow<String?> = context.dataStore.data.map { it[Keys.ACTIVE_IMAGE_FOLDER_URI] }.distinctUntilChanged()
-    val activeVideoFolderUri: Flow<String?> = context.dataStore.data.map { it[Keys.ACTIVE_VIDEO_FOLDER_URI] }.distinctUntilChanged()
+    /** @deprecated Prefer [activeFolderUri] with target; kept for migration/UI summary. */
+    val activeImageFolderUri: Flow<String?> = activeFolderUri(
+        com.klvw.wallpaper.data.model.WallpaperTarget.HOME,
+        com.klvw.wallpaper.data.model.FolderType.IMAGE
+    )
+    /** @deprecated Prefer [activeFolderUri] with target. */
+    val activeVideoFolderUri: Flow<String?> = activeFolderUri(
+        com.klvw.wallpaper.data.model.WallpaperTarget.HOME,
+        com.klvw.wallpaper.data.model.FolderType.VIDEO
+    )
+
+    fun activeFolderUri(
+        target: com.klvw.wallpaper.data.model.WallpaperTarget,
+        type: com.klvw.wallpaper.data.model.FolderType
+    ): Flow<String?> = context.dataStore.data.map { prefs ->
+        val primary = when {
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME &&
+                type == com.klvw.wallpaper.data.model.FolderType.IMAGE ->
+                prefs[Keys.ACTIVE_HOME_IMAGE_FOLDER_URI]
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME &&
+                type == com.klvw.wallpaper.data.model.FolderType.VIDEO ->
+                prefs[Keys.ACTIVE_HOME_VIDEO_FOLDER_URI]
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.LOCK &&
+                type == com.klvw.wallpaper.data.model.FolderType.IMAGE ->
+                prefs[Keys.ACTIVE_LOCK_IMAGE_FOLDER_URI]
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.LOCK &&
+                type == com.klvw.wallpaper.data.model.FolderType.VIDEO ->
+                prefs[Keys.ACTIVE_LOCK_VIDEO_FOLDER_URI]
+            else -> null
+        }
+        if (!primary.isNullOrBlank()) return@map primary
+        // Migrate legacy shared keys → home only.
+        if (target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME) {
+            when (type) {
+                com.klvw.wallpaper.data.model.FolderType.IMAGE -> prefs[Keys.ACTIVE_IMAGE_FOLDER_URI]
+                com.klvw.wallpaper.data.model.FolderType.VIDEO -> prefs[Keys.ACTIVE_VIDEO_FOLDER_URI]
+                else -> null
+            }
+        } else null
+    }.distinctUntilChanged()
+
+    fun defaultFolderUri(
+        target: com.klvw.wallpaper.data.model.WallpaperTarget,
+        type: com.klvw.wallpaper.data.model.FolderType
+    ): Flow<String?> = context.dataStore.data.map { prefs ->
+        when {
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME &&
+                type == com.klvw.wallpaper.data.model.FolderType.IMAGE ->
+                prefs[Keys.DEFAULT_HOME_IMAGE_FOLDER_URI]
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME &&
+                type == com.klvw.wallpaper.data.model.FolderType.VIDEO ->
+                prefs[Keys.DEFAULT_HOME_VIDEO_FOLDER_URI]
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.LOCK &&
+                type == com.klvw.wallpaper.data.model.FolderType.IMAGE ->
+                prefs[Keys.DEFAULT_LOCK_IMAGE_FOLDER_URI]
+            target == com.klvw.wallpaper.data.model.WallpaperTarget.LOCK &&
+                type == com.klvw.wallpaper.data.model.FolderType.VIDEO ->
+                prefs[Keys.DEFAULT_LOCK_VIDEO_FOLDER_URI]
+            else -> null
+        }
+    }.distinctUntilChanged()
     val forceIconColor: Flow<String> = context.dataStore.data.map { it[Keys.FORCE_ICON_COLOR] ?: "auto" }.distinctUntilChanged()
     val prevHomeWallpaperUri: Flow<String?> = context.dataStore.data.map { it[Keys.PREV_HOME_WALLPAPER_URI] }.distinctUntilChanged()
     val prevHomeIsVideo: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREV_HOME_IS_VIDEO] ?: false }.distinctUntilChanged()
@@ -352,16 +416,53 @@ class SettingsPreferences @Inject constructor(
     }
 
     suspend fun setActiveImageFolder(uri: String?) {
-        context.dataStore.edit {
-            if (uri != null) it[Keys.ACTIVE_IMAGE_FOLDER_URI] = uri
-            else it.remove(Keys.ACTIVE_IMAGE_FOLDER_URI)
-        }
+        setActiveFolder(
+            com.klvw.wallpaper.data.model.WallpaperTarget.HOME,
+            com.klvw.wallpaper.data.model.FolderType.IMAGE,
+            uri
+        )
     }
 
     suspend fun setActiveVideoFolder(uri: String?) {
-        context.dataStore.edit {
-            if (uri != null) it[Keys.ACTIVE_VIDEO_FOLDER_URI] = uri
-            else it.remove(Keys.ACTIVE_VIDEO_FOLDER_URI)
+        setActiveFolder(
+            com.klvw.wallpaper.data.model.WallpaperTarget.HOME,
+            com.klvw.wallpaper.data.model.FolderType.VIDEO,
+            uri
+        )
+    }
+
+    suspend fun setActiveFolder(
+        target: com.klvw.wallpaper.data.model.WallpaperTarget,
+        type: com.klvw.wallpaper.data.model.FolderType,
+        uri: String?
+    ) {
+        context.dataStore.edit { prefs ->
+            val key = when {
+                target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME &&
+                    type == com.klvw.wallpaper.data.model.FolderType.IMAGE ->
+                    Keys.ACTIVE_HOME_IMAGE_FOLDER_URI
+                target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME &&
+                    type == com.klvw.wallpaper.data.model.FolderType.VIDEO ->
+                    Keys.ACTIVE_HOME_VIDEO_FOLDER_URI
+                target == com.klvw.wallpaper.data.model.WallpaperTarget.LOCK &&
+                    type == com.klvw.wallpaper.data.model.FolderType.IMAGE ->
+                    Keys.ACTIVE_LOCK_IMAGE_FOLDER_URI
+                target == com.klvw.wallpaper.data.model.WallpaperTarget.LOCK &&
+                    type == com.klvw.wallpaper.data.model.FolderType.VIDEO ->
+                    Keys.ACTIVE_LOCK_VIDEO_FOLDER_URI
+                else -> null
+            } ?: return@edit
+            if (uri.isNullOrBlank()) prefs.remove(key) else prefs[key] = uri
+            // Clear legacy shared keys once per-target home is written.
+            if (target == com.klvw.wallpaper.data.model.WallpaperTarget.HOME) {
+                when (type) {
+                    com.klvw.wallpaper.data.model.FolderType.IMAGE ->
+                        prefs.remove(Keys.ACTIVE_IMAGE_FOLDER_URI)
+                    com.klvw.wallpaper.data.model.FolderType.VIDEO ->
+                        prefs.remove(Keys.ACTIVE_VIDEO_FOLDER_URI)
+                    else -> Unit
+                }
+            }
         }
     }
 

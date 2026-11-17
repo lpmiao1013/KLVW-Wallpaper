@@ -12,10 +12,9 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
-import com.klvw.wallpaper.preset.PresetManager
+import com.klvw.wallpaper.scheme.WallpaperSchemeResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
-import javax.inject.Provider
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +35,7 @@ class ScheduleManager @Inject constructor(
     private val folderRepository: FolderRepository,
     private val wallpaperRepository: WallpaperRepository,
     private val shuffleHistoryManager: ShuffleHistoryManager,
-    private val presetManager: Provider<PresetManager>
+    private val schemeResolver: WallpaperSchemeResolver
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -96,44 +95,11 @@ class ScheduleManager @Inject constructor(
     }
 
     /**
-     * Folder for timers / double-tap / unlock / picker fallback.
-     * Priority (highest first):
-     * 1. Preset folder source (while preset active, media must match)
-     * 2. Current schedule window (schedule on and preset off, media must match)
-     * 3. Tabbar active folder for that media type
-     * 4. Per-screen default folder
+     * Delegates to [WallpaperSchemeResolver]: preset → schedule → tabbar(指定) → default.
+     * Each layer reads only its own store; button state picks the layer.
      */
-    suspend fun resolveFolderUri(target: WallpaperTarget, type: FolderType): String? {
-        if (target != WallpaperTarget.HOME && target != WallpaperTarget.LOCK) return null
-        // Preset owns the stack while active — never fall through to schedule/active/default
-        // (file-source presets correctly return null = no folder to cycle).
-        if (presetManager.get().isActive()) {
-            return presetManager.get().resolveFolderUri(target, type)
-        }
-        if (isEnabled()) {
-            val rule = currentRule(target) ?: return null
-            return if (rule.media == type) rule.folderUri else null
-        }
-        val active = when (type) {
-            FolderType.IMAGE -> prefs.activeImageFolderUri.first()
-            FolderType.VIDEO -> prefs.activeVideoFolderUri.first()
-            FolderType.STATIC -> null
-        }
-        if (!active.isNullOrBlank()) return active
-        return defaultFolder(target, type)
-    }
-
-    private suspend fun defaultFolder(target: WallpaperTarget, type: FolderType): String? = when {
-        target == WallpaperTarget.HOME && type == FolderType.IMAGE ->
-            prefs.defaultHomeImageFolderUri.first()
-        target == WallpaperTarget.HOME && type == FolderType.VIDEO ->
-            prefs.defaultHomeVideoFolderUri.first()
-        target == WallpaperTarget.LOCK && type == FolderType.IMAGE ->
-            prefs.defaultLockImageFolderUri.first()
-        target == WallpaperTarget.LOCK && type == FolderType.VIDEO ->
-            prefs.defaultLockVideoFolderUri.first()
-        else -> null
-    }
+    suspend fun resolveFolderUri(target: WallpaperTarget, type: FolderType): String? =
+        schemeResolver.resolveFolderUri(target, type)
 
     /** Whether QS tile / enable is allowed: active group exists and validates. */
     suspend fun canUseScheduleTile(): Boolean {

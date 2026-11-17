@@ -15,6 +15,8 @@ import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.preset.PresetManager
 import com.klvw.wallpaper.schedule.ScheduleManager
+import com.klvw.wallpaper.scheme.WallpaperScheme
+import com.klvw.wallpaper.scheme.WallpaperSchemeResolver
 import com.klvw.wallpaper.tile.FolderHideTileService
 import com.klvw.wallpaper.tile.PresetTileService
 import com.klvw.wallpaper.tile.ScheduleTileService
@@ -62,9 +64,11 @@ data class WallpaperUiState(
     val defaultLockImageFolderUri: String? = null,
     val defaultHomeVideoFolderUri: String? = null,
     val defaultLockVideoFolderUri: String? = null,
-    /** Wallpaper tabbar “指定” folders (persist across schedule/preset). */
-    val activeImageFolderUri: String? = null,
-    val activeVideoFolderUri: String? = null,
+    /** Wallpaper tabbar “指定” — home/lock × image/video, independent stores. */
+    val activeHomeImageFolderUri: String? = null,
+    val activeHomeVideoFolderUri: String? = null,
+    val activeLockImageFolderUri: String? = null,
+    val activeLockVideoFolderUri: String? = null,
     val scheduleEnabled: Boolean = false,
     /** Currently applied home / lock wallpaper content URIs (from prefs). */
     val homeAppliedUri: String? = null,
@@ -92,7 +96,8 @@ class WallpaperViewModel @Inject constructor(
     private val prefs: SettingsPreferences,
     private val scheduleManager: ScheduleManager,
     private val sharpnessLogStore: SharpnessLogStore,
-    private val presetManager: PresetManager
+    private val presetManager: PresetManager,
+    private val schemeResolver: WallpaperSchemeResolver
 ) : ViewModel() {
 
     val sharpnessLogs = sharpnessLogStore.entries
@@ -100,20 +105,23 @@ class WallpaperViewModel @Inject constructor(
     private val _state = MutableStateFlow(WallpaperUiState())
     val state: StateFlow<WallpaperUiState> = _state.asStateFlow()
 
-    // In-memory cache — avoids async prefs reads on every tab switch
-    private var savedImageFolderUri: String? = null
-    private var savedVideoFolderUri: String? = null
+    /** In-memory tabbar picks: home/lock × image/video — never shared with schedule/preset. */
+    private var savedHomeImage: String? = null
+    private var savedHomeVideo: String? = null
+    private var savedLockImage: String? = null
+    private var savedLockVideo: String? = null
     /** Drops stale folder scans when the user switches tabs/folders quickly. */
     private val previewLoadGeneration = AtomicInteger(0)
 
     init {
         viewModelScope.launch {
-            // Load persisted folder selections once before first emit
-            savedImageFolderUri = prefs.activeImageFolderUri.first()
-            savedVideoFolderUri = prefs.activeVideoFolderUri.first()
+            savedHomeImage = prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.IMAGE).first()
+            savedHomeVideo = prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.VIDEO).first()
+            savedLockImage = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.IMAGE).first()
+            savedLockVideo = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.VIDEO).first()
             _state.update {
                 it.copy(
-                    selectedFolderUri = savedImageFolderUri,
+                    selectedFolderUri = savedHomeImage,
                     isLoadingPreview = true,
                     previewItems = emptyList()
                 )
@@ -217,10 +225,26 @@ class WallpaperViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            combine(prefs.activeImageFolderUri, prefs.activeVideoFolderUri) { img, vid ->
-                img to vid
-            }.collect { (img, vid) ->
-                _state.update { it.copy(activeImageFolderUri = img, activeVideoFolderUri = vid) }
+            combine(
+                prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.IMAGE),
+                prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.VIDEO),
+                prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.IMAGE),
+                prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.VIDEO)
+            ) { hImg, hVid, lImg, lVid ->
+                listOf(hImg, hVid, lImg, lVid)
+            }.collect { d ->
+                savedHomeImage = d[0]
+                savedHomeVideo = d[1]
+                savedLockImage = d[2]
+                savedLockVideo = d[3]
+                _state.update {
+                    it.copy(
+                        activeHomeImageFolderUri = d[0],
+                        activeHomeVideoFolderUri = d[1],
+                        activeLockImageFolderUri = d[2],
+                        activeLockVideoFolderUri = d[3]
+                    )
+                }
             }
         }
 
@@ -354,16 +378,35 @@ class WallpaperViewModel @Inject constructor(
         loadPreviewItems(clearFirst = false)
     }
 
-    /** After schedule/preset release, restore tabbar from persisted active folders. */
-    private suspend fun restorePickerFromActiveFolders() {
-        savedImageFolderUri = prefs.activeImageFolderUri.first()
-        savedVideoFolderUri = prefs.activeVideoFolderUri.first()
-        val tab = _state.value.mediaTab
-        val folderUri = when (tab) {
-            MediaTab.IMAGE -> savedImageFolderUri
-            MediaTab.VIDEO -> savedVideoFolderUri
-            MediaTab.STATIC -> null
+    private fun screenTarget(): WallpaperTarget =
+        if (_state.value.target == WallpaperTarget.LOCK) WallpaperTarget.LOCK else WallpaperTarget.HOME
+
+    private fun savedFor(target: WallpaperTarget, tab: MediaTab): String? = when {
+        target == WallpaperTarget.LOCK && tab == MediaTab.IMAGE -> savedLockImage
+        target == WallpaperTarget.LOCK && tab == MediaTab.VIDEO -> savedLockVideo
+        tab == MediaTab.IMAGE -> savedHomeImage
+        tab == MediaTab.VIDEO -> savedHomeVideo
+        else -> null
+    }
+
+    private fun putSaved(target: WallpaperTarget, tab: MediaTab, uri: String?) {
+        when {
+            target == WallpaperTarget.LOCK && tab == MediaTab.IMAGE -> savedLockImage = uri
+            target == WallpaperTarget.LOCK && tab == MediaTab.VIDEO -> savedLockVideo = uri
+            tab == MediaTab.IMAGE -> savedHomeImage = uri
+            tab == MediaTab.VIDEO -> savedHomeVideo = uri
         }
+    }
+
+    /** After schedule/preset release, restore tabbar from that screen's own store. */
+    private suspend fun restorePickerFromActiveFolders() {
+        val target = screenTarget()
+        savedHomeImage = prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.IMAGE).first()
+        savedHomeVideo = prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.VIDEO).first()
+        savedLockImage = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.IMAGE).first()
+        savedLockVideo = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.VIDEO).first()
+        val tab = _state.value.mediaTab
+        val folderUri = savedFor(target, tab)
         _state.update {
             it.copy(
                 selectedFolderUri = folderUri,
@@ -390,11 +433,7 @@ class WallpaperViewModel @Inject constructor(
             viewModelScope.launch { syncFolderToSchedule() }
             return
         }
-        val folderUri = when (tab) {
-            MediaTab.IMAGE -> savedImageFolderUri
-            MediaTab.VIDEO -> savedVideoFolderUri
-            MediaTab.STATIC -> null
-        }
+        val folderUri = savedFor(screenTarget(), tab)
         // Clear grid in the same frame as the tab change so image thumbs never
         // sit under the video tab (or vice versa) while SAF scan is slow.
         _state.update {
@@ -414,6 +453,7 @@ class WallpaperViewModel @Inject constructor(
         when {
             isPresetDrivingUi() -> viewModelScope.launch { syncFolderToPreset() }
             isScheduleDrivingUi() -> viewModelScope.launch { syncFolderToSchedule() }
+            else -> viewModelScope.launch { restorePickerFromActiveFolders() }
         }
     }
 
@@ -433,8 +473,9 @@ class WallpaperViewModel @Inject constructor(
             return
         }
         val tab = _state.value.mediaTab
-        if (tab == MediaTab.IMAGE) savedImageFolderUri = folderUri
-        else if (tab == MediaTab.VIDEO) savedVideoFolderUri = folderUri
+        if (tab != MediaTab.IMAGE && tab != MediaTab.VIDEO) return
+        val target = screenTarget()
+        putSaved(target, tab, folderUri)
         _state.update {
             it.copy(
                 selectedFolderUri = folderUri,
@@ -445,10 +486,13 @@ class WallpaperViewModel @Inject constructor(
         }
         loadPreviewItems(clearFirst = false)
         viewModelScope.launch {
-            if (tab == MediaTab.IMAGE) prefs.setActiveImageFolder(folderUri)
-            else if (tab == MediaTab.VIDEO) prefs.setActiveVideoFolder(folderUri)
+            val type = if (tab == MediaTab.VIDEO) FolderType.VIDEO else FolderType.IMAGE
+            prefs.setActiveFolder(target, type, folderUri)
         }
     }
+
+    /** Button-state scheme for banners: preset > schedule > tabbar > default. */
+    suspend fun currentScheme(): WallpaperScheme = schemeResolver.currentScheme()
 
     fun setWallpaper() {
         val item = _state.value.selectedItem ?: return
@@ -570,13 +614,10 @@ class WallpaperViewModel @Inject constructor(
             FolderType.VIDEO -> _state.value.videoFolders.firstOrNull { it.uri != folder.uri && !it.hidden }
             FolderType.STATIC -> null
         }
-        if (folder.type == FolderType.IMAGE) {
-            savedImageFolderUri = next?.uri
-            prefs.setActiveImageFolder(next?.uri)
-        } else {
-            savedVideoFolderUri = next?.uri
-            prefs.setActiveVideoFolder(next?.uri)
-        }
+        val target = screenTarget()
+        val tab = if (folder.type == FolderType.VIDEO) MediaTab.VIDEO else MediaTab.IMAGE
+        putSaved(target, tab, next?.uri)
+        prefs.setActiveFolder(target, folder.type, next?.uri)
         _state.update {
             it.copy(
                 selectedFolderUri = next?.uri,

@@ -2051,24 +2051,31 @@ private fun CurrentSchemeBanner(viewModel: WallpaperViewModel) {
         com.klvw.wallpaper.data.model.ScheduleGroup.listFromJson(groupsJson)
     }
     val activeGroupName = groups.find { it.id == activeId }?.name
+    val hasTabbar = listOf(
+        state.activeHomeImageFolderUri,
+        state.activeHomeVideoFolderUri,
+        state.activeLockImageFolderUri,
+        state.activeLockVideoFolderUri
+    ).any { !it.isNullOrBlank() }
 
+    // Button-state only: each layer has its own store; no mixing.
     val (title, detail) = when {
         state.presetEnabled -> {
             val home = if (state.presetHomeIsVideo) "视频" else "图片"
             val lock = if (state.presetLockIsVideo) "视频" else "图片"
             val homeSrc = if (state.presetHomeSource == "folder") "文件夹" else "文件"
             val lockSrc = if (state.presetLockSource == "folder") "文件夹" else "文件"
-            "当前方案：预设" to "桌面 $home/$homeSrc · 锁屏 $lock/$lockSrc（最高优先级）"
+            "当前方案：预设" to "读预设仓 · 桌面 $home/$homeSrc · 锁屏 $lock/$lockSrc"
         }
         state.scheduleEnabled -> {
             val name = activeGroupName?.let { "「$it」" } ?: "（未选分组）"
-            "当前方案：时段" to "分组 $name · 按时间窗口切换"
+            "当前方案：时段" to "读时段仓 · 分组 $name"
         }
-        !state.activeImageFolderUri.isNullOrBlank() || !state.activeVideoFolderUri.isNullOrBlank() -> {
-            "当前方案：壁纸页指定" to "双击/定时优先用壁纸页选中的文件夹"
+        hasTabbar -> {
+            "当前方案：壁纸页指定" to "读指定仓（桌面/锁屏 × 图/视频分开存）"
         }
         else -> {
-            "当前方案：默认文件夹" to "使用文件夹管理里配置的桌面/锁屏默认"
+            "当前方案：默认文件夹" to "读默认仓（文件夹管理中的桌面/锁屏默认）"
         }
     }
 
@@ -2087,7 +2094,7 @@ private fun CurrentSchemeBanner(viewModel: WallpaperViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            "优先级：预设 ＞ 时段 ＞ 壁纸页指定 ＞ 默认",
+            "优先级：预设开 ＞ 时段开 ＞ 壁纸页指定 ＞ 默认（分仓，不串写）",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary
         )

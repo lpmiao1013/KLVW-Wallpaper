@@ -155,11 +155,16 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
     ) {
         Spacer(Modifier.height(8.dp))
 
+        val hasTabbar = listOf(
+            state.activeHomeImageFolderUri,
+            state.activeHomeVideoFolderUri,
+            state.activeLockImageFolderUri,
+            state.activeLockVideoFolderUri
+        ).any { !it.isNullOrBlank() }
         val schemeLabel = when {
-            state.presetEnabled -> "当前：预设方案（最高优先级）"
-            state.scheduleEnabled -> "当前：时段方案"
-            !state.activeImageFolderUri.isNullOrBlank() || !state.activeVideoFolderUri.isNullOrBlank() ->
-                "当前：壁纸页指定"
+            state.presetEnabled -> "当前：预设（独立仓）"
+            state.scheduleEnabled -> "当前：时段（独立仓）"
+            hasTabbar -> "当前：壁纸页指定（本屏独立仓）"
             else -> "当前：默认文件夹"
         }
         Text(
