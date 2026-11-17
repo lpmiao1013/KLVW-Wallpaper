@@ -136,6 +136,10 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             TimerGlobalOffSection(popupViewModel = popupViewModel)
         }
 
+        SettingsSection(title = "预设方案") {
+            PresetSettingsSection(viewModel = viewModel)
+        }
+
         SettingsSection(title = "时段方案") {
             ScheduleSettingsSection(viewModel = viewModel)
         }

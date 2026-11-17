@@ -24,6 +24,7 @@ import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.aer.AerLockStore
 import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
+import com.klvw.wallpaper.preset.PresetManager
 import com.klvw.wallpaper.schedule.ScheduleManager
 import com.klvw.wallpaper.tile.ScreenUnlockReceiver
 import com.klvw.wallpaper.tile.TimerStatusNotificationHelper
@@ -57,11 +58,15 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var shuffleHistoryManager: ShuffleHistoryManager
     /** Eagerly create so schedule alarms re-arm after process start. */
     @Inject lateinit var scheduleManager: ScheduleManager
+    /** Eagerly create so preset ↔ schedule gating is live after process start. */
+    @Inject lateinit var presetManager: PresetManager
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
+        // Keep Hilt singletons rooted for process lifetime.
+        presetManager
         VideoPlaybackPositions.init(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(

@@ -13,6 +13,7 @@ import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
+import com.klvw.wallpaper.preset.PresetManager
 import com.klvw.wallpaper.schedule.ScheduleManager
 import com.klvw.wallpaper.util.SharpnessLogStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -61,6 +62,11 @@ data class WallpaperUiState(
     /** Currently applied home / lock wallpaper content URIs (from prefs). */
     val homeAppliedUri: String? = null,
     val lockAppliedUri: String? = null,
+    val presetEnabled: Boolean = false,
+    val presetHomeUri: String? = null,
+    val presetHomeIsVideo: Boolean = false,
+    val presetLockUri: String? = null,
+    val presetLockIsVideo: Boolean = false,
 )
 
 @HiltViewModel
@@ -71,7 +77,8 @@ class WallpaperViewModel @Inject constructor(
     private val staticImageRepository: StaticImageRepository,
     private val prefs: SettingsPreferences,
     private val scheduleManager: ScheduleManager,
-    private val sharpnessLogStore: SharpnessLogStore
+    private val sharpnessLogStore: SharpnessLogStore,
+    private val presetManager: PresetManager
 ) : ViewModel() {
 
     val sharpnessLogs = sharpnessLogStore.entries
@@ -207,6 +214,30 @@ class WallpaperViewModel @Inject constructor(
                 home to lock
             }.collect { (home, lock) ->
                 _state.update { it.copy(homeAppliedUri = home, lockAppliedUri = lock) }
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                combine(
+                    prefs.presetEnabled,
+                    prefs.presetHomeUri,
+                    prefs.presetHomeIsVideo
+                ) { enabled, homeUri, homeVideo -> Triple(enabled, homeUri, homeVideo) },
+                combine(
+                    prefs.presetLockUri,
+                    prefs.presetLockIsVideo
+                ) { lockUri, lockVideo -> lockUri to lockVideo }
+            ) { home, lock -> home to lock }.collect { (home, lock) ->
+                _state.update {
+                    it.copy(
+                        presetEnabled = home.first,
+                        presetHomeUri = home.second,
+                        presetHomeIsVideo = home.third,
+                        presetLockUri = lock.first,
+                        presetLockIsVideo = lock.second
+                    )
+                }
             }
         }
     }
@@ -415,6 +446,41 @@ class WallpaperViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             onResult(scheduleManager.saveGroups(groups))
+        }
+    }
+
+    // ── Scene preset ────────────────────────────────────────────────
+
+    fun setPresetHome(uri: String?, isVideo: Boolean) {
+        viewModelScope.launch { prefs.setPresetHome(uri, isVideo) }
+    }
+
+    fun setPresetLock(uri: String?, isVideo: Boolean) {
+        viewModelScope.launch { prefs.setPresetLock(uri, isVideo) }
+    }
+
+    fun setPresetHomeMedia(isVideo: Boolean) {
+        viewModelScope.launch {
+            // Switching type clears the previous file so MIME matches.
+            prefs.setPresetHome(null, isVideo)
+        }
+    }
+
+    fun setPresetLockMedia(isVideo: Boolean) {
+        viewModelScope.launch {
+            prefs.setPresetLock(null, isVideo)
+        }
+    }
+
+    fun enablePreset(onResult: (String?) -> Unit = {}) {
+        viewModelScope.launch {
+            onResult(presetManager.enable())
+        }
+    }
+
+    fun disablePreset(onResult: (String?) -> Unit = {}) {
+        viewModelScope.launch {
+            onResult(presetManager.disable())
         }
     }
 

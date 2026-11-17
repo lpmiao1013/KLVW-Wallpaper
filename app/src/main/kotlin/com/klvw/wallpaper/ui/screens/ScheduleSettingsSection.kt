@@ -75,6 +75,7 @@ fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
     val enabled by viewModel.scheduleEnabledFlow.collectAsStateWithLifecycle()
     val groupsJson by viewModel.scheduleGroupsJson.collectAsStateWithLifecycle()
     val activeId by viewModel.scheduleActiveGroupId.collectAsStateWithLifecycle()
+    val uiState by viewModel.state.collectAsStateWithLifecycle()
     val groups = remember(groupsJson) { ScheduleGroup.listFromJson(groupsJson) }
 
     var editing by remember { mutableStateOf<ScheduleGroup?>(null) }
@@ -84,6 +85,14 @@ fun ScheduleSettingsSection(viewModel: WallpaperViewModel) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (uiState.presetEnabled) {
+            Text(
+                "预设方案生效中：时段自动切换已暂停，关闭预设后会按配置恢复。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

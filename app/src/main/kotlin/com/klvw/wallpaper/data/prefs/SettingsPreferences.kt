@@ -123,6 +123,13 @@ class SettingsPreferences @Inject constructor(
         val SCHEDULE_GROUPS_JSON = stringPreferencesKey("schedule_groups_json")
         // Video sharpness: power | standard | quality
         val VIDEO_SHARPNESS_MODE = stringPreferencesKey("video_sharpness_mode")
+        // Scene preset (highest priority override)
+        val PRESET_ENABLED = booleanPreferencesKey("preset_enabled")
+        val PRESET_HOME_URI = stringPreferencesKey("preset_home_uri")
+        val PRESET_HOME_IS_VIDEO = booleanPreferencesKey("preset_home_is_video")
+        val PRESET_LOCK_URI = stringPreferencesKey("preset_lock_uri")
+        val PRESET_LOCK_IS_VIDEO = booleanPreferencesKey("preset_lock_is_video")
+        val PRESET_HISTORY_JSON = stringPreferencesKey("preset_history_json")
     }
 
     // Raw flows — distinctUntilChanged so writes to unrelated keys don't trigger re-emission
@@ -175,6 +182,24 @@ class SettingsPreferences @Inject constructor(
     /** power | standard | quality — default standard. */
     val videoSharpnessMode: Flow<String> = context.dataStore.data
         .map { it[Keys.VIDEO_SHARPNESS_MODE] ?: "standard" }
+        .distinctUntilChanged()
+    val presetEnabled: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.PRESET_ENABLED] ?: false }
+        .distinctUntilChanged()
+    val presetHomeUri: Flow<String?> = context.dataStore.data
+        .map { it[Keys.PRESET_HOME_URI] }
+        .distinctUntilChanged()
+    val presetHomeIsVideo: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.PRESET_HOME_IS_VIDEO] ?: false }
+        .distinctUntilChanged()
+    val presetLockUri: Flow<String?> = context.dataStore.data
+        .map { it[Keys.PRESET_LOCK_URI] }
+        .distinctUntilChanged()
+    val presetLockIsVideo: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.PRESET_LOCK_IS_VIDEO] ?: false }
+        .distinctUntilChanged()
+    val presetHistoryJson: Flow<String?> = context.dataStore.data
+        .map { it[Keys.PRESET_HISTORY_JSON] }
         .distinctUntilChanged()
     val popupLayout: Flow<String> = context.dataStore.data.map { it[Keys.POPUP_LAYOUT] ?: "list" }.distinctUntilChanged()
     val popupGridColumns: Flow<Int> = context.dataStore.data.map { it[Keys.POPUP_GRID_COLUMNS] ?: 3 }.distinctUntilChanged()
@@ -712,5 +737,32 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setScheduleGroupsJson(json: String) {
         context.dataStore.edit { it[Keys.SCHEDULE_GROUPS_JSON] = json }
+    }
+
+    suspend fun setPresetEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.PRESET_ENABLED] = enabled }
+    }
+
+    suspend fun setPresetHome(uri: String?, isVideo: Boolean) {
+        context.dataStore.edit {
+            if (uri.isNullOrBlank()) it.remove(Keys.PRESET_HOME_URI)
+            else it[Keys.PRESET_HOME_URI] = uri
+            it[Keys.PRESET_HOME_IS_VIDEO] = isVideo
+        }
+    }
+
+    suspend fun setPresetLock(uri: String?, isVideo: Boolean) {
+        context.dataStore.edit {
+            if (uri.isNullOrBlank()) it.remove(Keys.PRESET_LOCK_URI)
+            else it[Keys.PRESET_LOCK_URI] = uri
+            it[Keys.PRESET_LOCK_IS_VIDEO] = isVideo
+        }
+    }
+
+    suspend fun setPresetHistoryJson(json: String?) {
+        context.dataStore.edit {
+            if (json.isNullOrBlank()) it.remove(Keys.PRESET_HISTORY_JSON)
+            else it[Keys.PRESET_HISTORY_JSON] = json
+        }
     }
 }

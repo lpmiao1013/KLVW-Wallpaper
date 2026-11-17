@@ -39,23 +39,30 @@ class ScheduleManager @Inject constructor(
 
     init {
         scope.launch {
-            var wasEnabled = false
+            var wasEffective = false
             var first = true
             combine(
-                prefs.scheduleEnabled,
+                combine(prefs.scheduleEnabled, prefs.presetEnabled) { enabled, presetOn ->
+                    enabled to presetOn
+                },
                 prefs.scheduleActiveGroupId,
                 prefs.scheduleGroupsJson
-            ) { enabled, activeId, json -> Triple(enabled, activeId, json) }
+            ) { flags, activeId, json ->
+                // Include activeId/json so group edits still re-apply while schedule is live.
+                Triple(flags.first, flags.second, activeId to json)
+            }
                 .distinctUntilChanged()
-                .collect { (enabled, _, _) ->
-                    if (enabled) {
+                .collect { (rawEnabled, presetOn, _) ->
+                    val effective = rawEnabled && !presetOn
+                    if (effective) {
                         applyWindows(pick = true)
                         rescheduleAlarms()
                     } else {
                         cancelAlarms()
-                        if (!first && wasEnabled) applyDefaultsAfterDisable()
+                        // Only when the user turns schedule off — not when preset overlays it.
+                        if (!first && wasEffective && !rawEnabled) applyDefaultsAfterDisable()
                     }
-                    wasEnabled = enabled
+                    wasEffective = effective
                     first = false
                 }
         }
@@ -69,7 +76,15 @@ class ScheduleManager @Inject constructor(
         return groups().firstOrNull { it.id == id }
     }
 
-    suspend fun isEnabled(): Boolean = prefs.scheduleEnabled.first()
+    /** Raw user toggle (ignores preset overlay). */
+    suspend fun isScheduleFlagOn(): Boolean = prefs.scheduleEnabled.first()
+
+    /**
+     * Whether schedule should actively drive wallpapers / folder resolution.
+     * False while a scene preset is active (highest priority).
+     */
+    suspend fun isEnabled(): Boolean =
+        prefs.scheduleEnabled.first() && !prefs.presetEnabled.first()
 
     suspend fun currentRule(target: WallpaperTarget): ScheduleRule? {
         if (!isEnabled()) return null
@@ -79,8 +94,8 @@ class ScheduleManager @Inject constructor(
 
     /**
      * Folder for timers / double-tap / picker.
-     * Schedule on → current window folder only when [type] matches; else null.
-     * Schedule off → default folder for [target]+[type].
+     * Schedule on (and preset off) → current window folder only when [type] matches; else null.
+     * Otherwise → default folder for [target]+[type].
      */
     suspend fun resolveFolderUri(target: WallpaperTarget, type: FolderType): String? {
         if (target != WallpaperTarget.HOME && target != WallpaperTarget.LOCK) return null
@@ -129,7 +144,7 @@ class ScheduleManager @Inject constructor(
 
     /** Persist groups; every group must be a full valid 24h plan. */
     suspend fun saveGroups(groups: List<ScheduleGroup>): String? {
-        if (isEnabled()) {
+        if (isScheduleFlagOn()) {
             val activeId = prefs.scheduleActiveGroupId.first()
             if (activeId != null && groups.none { it.id == activeId }) {
                 return "启用中不能删除当前分组"
