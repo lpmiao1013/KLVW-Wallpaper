@@ -57,7 +57,7 @@ Pulling down your notification shade and tapping the tile will now open the KLVW
 
 ### Adding and Configuring Items
 
-Open the KLVW app → **Settings** → **KLVW Popup Menu** → **Add Item**.
+Open the KLVW app → **Settings** → **外观设置** → **KLVW Popup Menu** → **Add Item**.
 
 Each item has a **Label** and one of the following **Action Types**:
 
@@ -198,15 +198,15 @@ Automatically cycle to a new random wallpaper every time the screen is unlocked 
 
 ### Setup
 
-Settings → **KLVW Display Control**
+Settings → **KLVW Display Control** (unlock toggles). Permissions: **Settings → 高级功能 → 显示控制权限**.
 
 #### Required Permissions
 
 | Permission | Purpose | How to grant |
 |---|---|---|
-| Phone State | Read device call/screen state | Tap **Grant** in the section |
-| Usage Access | Read app foreground state | Tap **Grant** → enable KLVW in Usage Access settings |
-| Device Admin | Reliable lock-screen state detection | Tap **Grant** → enable KLVW Device Administrator |
+| Phone State | Read device call/screen state | **高级功能** → Tap **授权** |
+| Usage Access | Read app foreground state | **高级功能** → Tap **授权** → enable KLVW in Usage Access settings |
+| Device Admin | Reliable lock-screen state detection | **高级功能** → Tap **授权** → enable KLVW Device Administrator |
 
 #### On-Unlock Cycle Toggles
 
@@ -253,7 +253,7 @@ Tap the delete icon next to any folder. This only removes it from KLVW's list; t
 
 Independently from wallpaper setting, KLVW can force your status bar icons to a specific brightness mode.
 
-**Settings → Status Bar Icons** or via the **Icon Color** popup menu item.
+**Settings → 外观设置 → Status Bar Icons** or via the **Icon Color** popup menu item.
 
 | Mode | Behaviour |
 |---|---|
@@ -267,7 +267,7 @@ The Icon Color popup item lets you switch between modes directly from the floati
 
 ## Popup Appearance
 
-Settings → **Popup Appearance**
+Settings → **外观设置** → **Popup Appearance**
 
 Customise the look of the popup card:
 
@@ -283,7 +283,7 @@ Customise the look of the popup card:
 
 ## Performance
 
-Settings → **Performance**
+Settings → **高级功能** → **Performance**
 
 | Setting | Description |
 |---|---|
