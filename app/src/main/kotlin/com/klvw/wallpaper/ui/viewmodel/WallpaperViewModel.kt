@@ -73,6 +73,8 @@ data class WallpaperUiState(
     /** Currently applied home / lock wallpaper content URIs (from prefs). */
     val homeAppliedUri: String? = null,
     val lockAppliedUri: String? = null,
+    val homeIsVideo: Boolean = false,
+    val lockIsVideo: Boolean = false,
     val presetEnabled: Boolean = false,
     val presetHomeUri: String? = null,
     val presetHomeIsVideo: Boolean = false,
@@ -119,13 +121,21 @@ class WallpaperViewModel @Inject constructor(
             savedHomeVideo = prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.VIDEO).first()
             savedLockImage = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.IMAGE).first()
             savedLockVideo = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.VIDEO).first()
+            val homeVid = prefs.homeIsVideo.first()
+            val lockVid = prefs.lockIsVideo.first()
+            val img = folderRepository.getFoldersByType(FolderType.IMAGE).first()
+            val vid = folderRepository.getFoldersByType(FolderType.VIDEO).first()
             _state.update {
                 it.copy(
-                    selectedFolderUri = savedHomeImage,
+                    imageFolders = img,
+                    videoFolders = vid,
+                    homeIsVideo = homeVid,
+                    lockIsVideo = lockVid,
                     isLoadingPreview = true,
                     previewItems = emptyList()
                 )
             }
+            applyPickerDefaultSelection()
 
             combine(
                 folderRepository.getFoldersByType(FolderType.IMAGE),
@@ -133,10 +143,33 @@ class WallpaperViewModel @Inject constructor(
                 prefs.useVulkan
             ) { imgFolders, vidFolders, useVulkan ->
                 Triple(imgFolders, vidFolders, useVulkan)
-            }.collect { (img, vid, vulkan) ->
-                _state.update { it.copy(imageFolders = img, videoFolders = vid, useVulkan = vulkan) }
+            }.collect { (imgFolders, vidFolders, vulkan) ->
+                _state.update { s ->
+                    val sel = s.selectedFolderUri
+                    val list = if (s.mediaTab == MediaTab.VIDEO) vidFolders else imgFolders
+                    val schemeLocked = s.presetEnabled || (s.scheduleEnabled && !s.presetEnabled)
+                    val dropHidden = sel != null &&
+                        !schemeLocked &&
+                        s.mediaTab != MediaTab.STATIC &&
+                        list.none { it.uri == sel }
+                    s.copy(
+                        imageFolders = imgFolders,
+                        videoFolders = vidFolders,
+                        useVulkan = vulkan,
+                        selectedFolderUri = if (dropHidden) null else sel,
+                        previewItems = if (dropHidden) emptyList() else s.previewItems,
+                        isLoadingPreview = if (dropHidden) true else s.isLoadingPreview
+                    )
+                }
                 loadPreviewItems(clearFirst = false)
             }
+        }
+
+        viewModelScope.launch {
+            combine(prefs.homeIsVideo, prefs.lockIsVideo) { home, lock -> home to lock }
+                .collect { (home, lock) ->
+                    _state.update { it.copy(homeIsVideo = home, lockIsVideo = lock) }
+                }
         }
 
         viewModelScope.launch {
@@ -256,7 +289,7 @@ class WallpaperViewModel @Inject constructor(
                 when {
                     presetOn -> syncFolderToPreset()
                     scheduleOn -> syncFolderToSchedule()
-                    else -> restorePickerFromActiveFolders()
+                    else -> applyPickerDefaultSelection()
                 }
             }
         }
@@ -381,14 +414,6 @@ class WallpaperViewModel @Inject constructor(
     private fun screenTarget(): WallpaperTarget =
         if (_state.value.target == WallpaperTarget.LOCK) WallpaperTarget.LOCK else WallpaperTarget.HOME
 
-    private fun savedFor(target: WallpaperTarget, tab: MediaTab): String? = when {
-        target == WallpaperTarget.LOCK && tab == MediaTab.IMAGE -> savedLockImage
-        target == WallpaperTarget.LOCK && tab == MediaTab.VIDEO -> savedLockVideo
-        tab == MediaTab.IMAGE -> savedHomeImage
-        tab == MediaTab.VIDEO -> savedHomeVideo
-        else -> null
-    }
-
     private fun putSaved(target: WallpaperTarget, tab: MediaTab, uri: String?) {
         when {
             target == WallpaperTarget.LOCK && tab == MediaTab.IMAGE -> savedLockImage = uri
@@ -398,24 +423,57 @@ class WallpaperViewModel @Inject constructor(
         }
     }
 
-    /** After schedule/preset release, restore tabbar from that screen's own store. */
-    private suspend fun restorePickerFromActiveFolders() {
-        val target = screenTarget()
+    /**
+     * Picker dropdown default (browse only — does not write 指定仓):
+     * type matches current screen wallpaper → resolve folder if visible;
+     * else / hidden / miss → null = 「全部文件夹」.
+     */
+    private suspend fun defaultPickerFolderUri(
+        target: WallpaperTarget,
+        tab: MediaTab
+    ): String? {
+        if (tab != MediaTab.IMAGE && tab != MediaTab.VIDEO) return null
+        val wantVideo = tab == MediaTab.VIDEO
+        val screenIsVideo = if (target == WallpaperTarget.LOCK) {
+            _state.value.lockIsVideo
+        } else {
+            _state.value.homeIsVideo
+        }
+        if (wantVideo != screenIsVideo) return null
+        val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
+        val uri = schemeResolver.resolveFolderUri(target, type) ?: return null
+        val visible = if (wantVideo) _state.value.videoFolders else _state.value.imageFolders
+        return uri.takeIf { u -> visible.any { it.uri == u } }
+    }
+
+    /** After schedule/preset release, or tab/target change — browse default only. */
+    private suspend fun applyPickerDefaultSelection() {
+        when {
+            isPresetDrivingUi() -> {
+                syncFolderToPreset()
+                return
+            }
+            isScheduleDrivingUi() -> {
+                syncFolderToSchedule()
+                return
+            }
+        }
         savedHomeImage = prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.IMAGE).first()
         savedHomeVideo = prefs.activeFolderUri(WallpaperTarget.HOME, FolderType.VIDEO).first()
         savedLockImage = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.IMAGE).first()
         savedLockVideo = prefs.activeFolderUri(WallpaperTarget.LOCK, FolderType.VIDEO).first()
         val tab = _state.value.mediaTab
-        val folderUri = savedFor(target, tab)
+        if (tab == MediaTab.STATIC) return
+        val folderUri = defaultPickerFolderUri(screenTarget(), tab)
         _state.update {
             it.copy(
                 selectedFolderUri = folderUri,
                 selectedItem = null,
                 previewItems = emptyList(),
-                isLoadingPreview = tab != MediaTab.STATIC
+                isLoadingPreview = true
             )
         }
-        if (tab != MediaTab.STATIC) loadPreviewItems(clearFirst = false)
+        loadPreviewItems(clearFirst = false)
     }
 
     fun setMediaTab(tab: MediaTab) {
@@ -433,28 +491,34 @@ class WallpaperViewModel @Inject constructor(
             viewModelScope.launch { syncFolderToSchedule() }
             return
         }
-        val folderUri = savedFor(screenTarget(), tab)
         // Clear grid in the same frame as the tab change so image thumbs never
         // sit under the video tab (or vice versa) while SAF scan is slow.
         _state.update {
             it.copy(
                 mediaTab = tab,
                 selectedItem = null,
-                selectedFolderUri = folderUri,
+                selectedFolderUri = null,
                 previewItems = emptyList(),
                 isLoadingPreview = true
             )
         }
-        loadPreviewItems(clearFirst = false)
+        viewModelScope.launch {
+            val folderUri = defaultPickerFolderUri(screenTarget(), tab)
+            if (_state.value.mediaTab != tab) return@launch
+            _state.update {
+                it.copy(
+                    selectedFolderUri = folderUri,
+                    previewItems = emptyList(),
+                    isLoadingPreview = true
+                )
+            }
+            loadPreviewItems(clearFirst = false)
+        }
     }
 
     fun setTarget(target: WallpaperTarget) {
         _state.update { it.copy(target = target) }
-        when {
-            isPresetDrivingUi() -> viewModelScope.launch { syncFolderToPreset() }
-            isScheduleDrivingUi() -> viewModelScope.launch { syncFolderToSchedule() }
-            else -> viewModelScope.launch { restorePickerFromActiveFolders() }
-        }
+        viewModelScope.launch { applyPickerDefaultSelection() }
     }
 
     fun selectItem(item: WallpaperItem) {
@@ -609,23 +673,19 @@ class WallpaperViewModel @Inject constructor(
     private suspend fun clearPickerIfSelected(folder: FolderEntity) {
         if (_state.value.selectedFolderUri != folder.uri) return
         if (folder.type == FolderType.STATIC) return
-        val next = when (folder.type) {
-            FolderType.IMAGE -> _state.value.imageFolders.firstOrNull { it.uri != folder.uri && !it.hidden }
-            FolderType.VIDEO -> _state.value.videoFolders.firstOrNull { it.uri != folder.uri && !it.hidden }
-            FolderType.STATIC -> null
-        }
         val target = screenTarget()
         val tab = if (folder.type == FolderType.VIDEO) MediaTab.VIDEO else MediaTab.IMAGE
-        putSaved(target, tab, next?.uri)
-        prefs.setActiveFolder(target, folder.type, next?.uri)
+        // Hidden / unmarked current folder → 「全部文件夹」, do not force first row.
+        putSaved(target, tab, null)
+        prefs.setActiveFolder(target, folder.type, null)
         _state.update {
             it.copy(
-                selectedFolderUri = next?.uri,
+                selectedFolderUri = null,
                 previewItems = emptyList(),
-                isLoadingPreview = next != null
+                isLoadingPreview = true
             )
         }
-        if (next != null) loadPreviewItems(clearFirst = true)
+        loadPreviewItems(clearFirst = true)
     }
 
     fun addStaticImage(uri: Uri, displayName: String) {
