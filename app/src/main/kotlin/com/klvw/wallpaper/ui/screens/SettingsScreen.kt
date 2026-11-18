@@ -3,10 +3,12 @@ package com.klvw.wallpaper.ui.screens
 import android.app.Activity.RESULT_OK
 import android.app.WallpaperManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -21,6 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -56,12 +60,23 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSharpnessLogs by remember { mutableStateOf(false) }
+    var showOtherFeatures by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = showOtherFeatures) { showOtherFeatures = false }
 
     if (showSharpnessLogs) {
         SharpnessLogDialog(
             viewModel = viewModel,
             onDismiss = { showSharpnessLogs = false }
         )
+    }
+
+    if (showOtherFeatures) {
+        OtherFeaturesSettingsScreen(
+            popupViewModel = popupViewModel,
+            onBack = { showOtherFeatures = false }
+        )
+        return
     }
 
     Column(
@@ -75,6 +90,7 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
 
         CurrentSchemeBanner(viewModel = viewModel)
 
+        SettingsGroupLabel("壁纸")
         SettingsSection(title = "性能") {
             SettingToggle(
                 icon = Icons.Default.Bolt,
@@ -129,6 +145,7 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             )
         }
 
+        SettingsGroupLabel("自动化")
         SettingsSection(title = "KLVW 显示控制") {
             DisplayControlSection(popupViewModel = popupViewModel)
         }
@@ -139,6 +156,7 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             TimerGlobalOffSection(popupViewModel = popupViewModel)
         }
 
+        // Companion toggles stay on main settings (not moved to 其他功能).
         SettingsSection(title = "预设方案") {
             PresetSettingsSection(viewModel = viewModel)
         }
@@ -154,7 +172,7 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             }
         }
 
-        // Less-used: status bar / popup menu / tile / watch faces — above watch section
+        SettingsGroupLabel("界面")
         SettingsSection(title = "状态栏图标") {
             Row(
                 modifier = Modifier
@@ -189,27 +207,39 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             KLVWPopupSection(popupViewModel = popupViewModel)
         }
 
-        SettingsSection(title = "KLVW 快捷设置磁贴") {
-            QuickSetTileSection(popupViewModel = popupViewModel)
-        }
-
-        SettingsSection(title = "Pujie 表盘") {
-            PujieWatchFaceSection(popupViewModel = popupViewModel)
-        }
-
-        SettingsSection(title = "KLVW 手表") {
-            KLVWWatchSection(popupViewModel = popupViewModel)
+        SettingsSection(title = "弹层外观") {
+            PopupAppearanceSection(popupViewModel = popupViewModel)
         }
 
         SettingsSection(title = "Aer 私密存储") {
             AerStorageSection(popupViewModel)
         }
 
-        SettingsSection(title = "弹层外观") {
-            PopupAppearanceSection(popupViewModel = popupViewModel)
+        SettingsGroupLabel("更多")
+        SettingsSection(title = "其他功能") {
+            SettingAction(
+                icon = Icons.Default.Extension,
+                title = "其他功能",
+                subtitle = "快捷设置磁贴、手表与表盘配置",
+                onClick = { showOtherFeatures = true },
+                trailing = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
         }
 
         SettingsSection(title = "关于") {
+            val versionName = remember(context) {
+                runCatching {
+                    context.packageManager
+                        .getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+                        .versionName
+                }.getOrNull().orEmpty().ifBlank { "?" }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -223,7 +253,7 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
                             modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                         Text("KLVW 壁纸", style = MaterialTheme.typography.titleMedium)
                     }
-                    Text("版本 7.0.0", style = MaterialTheme.typography.bodySmall,
+                    Text("版本 $versionName", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Samsung UI 8 · Android 16 · Vulkan GPU",
                         style = MaterialTheme.typography.bodySmall,
@@ -235,6 +265,50 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
                         lineHeight = MaterialTheme.typography.bodySmall.lineHeight)
                 }
             }
+        }
+
+        Spacer(Modifier.height(80.dp))
+    }
+}
+
+/** Watch + Quick Set tile configs (preset / schedule / hide companions stay on main). */
+@Composable
+private fun OtherFeaturesSettingsScreen(
+    popupViewModel: KLVWPopupViewModel,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onBack)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回",
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("其他功能", style = MaterialTheme.typography.titleMedium)
+        }
+
+        SettingsSection(title = "KLVW 快捷设置磁贴") {
+            QuickSetTileSection(popupViewModel = popupViewModel)
+        }
+        SettingsSection(title = "Pujie 表盘") {
+            PujieWatchFaceSection(popupViewModel = popupViewModel)
+        }
+        SettingsSection(title = "KLVW 手表") {
+            KLVWWatchSection(popupViewModel = popupViewModel)
         }
 
         Spacer(Modifier.height(80.dp))
@@ -1224,8 +1298,11 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
         "lock" to lockPol
     )
 
+    val activeTimers = timers.filter { it.enabled }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
+    // Only tick while at least one timer is on (countdown UI).
+    LaunchedEffect(activeTimers.isNotEmpty()) {
+        if (activeTimers.isEmpty()) return@LaunchedEffect
         while (true) {
             kotlinx.coroutines.delay(1000)
             now = System.currentTimeMillis()
@@ -1245,8 +1322,6 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-
-        val activeTimers = timers.filter { it.enabled }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1501,6 +1576,16 @@ private fun WallpaperDisplaySection(
 }
 
 @Composable
+private fun SettingsGroupLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+    )
+}
+
+@Composable
 private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -1546,13 +1631,15 @@ private fun SettingAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1564,7 +1651,8 @@ private fun SettingAction(
             Text(subtitle, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        TextButton(onClick = onClick) { Text("打开") }
+        if (trailing != null) trailing()
+        else TextButton(onClick = onClick) { Text("打开") }
     }
 }
 
