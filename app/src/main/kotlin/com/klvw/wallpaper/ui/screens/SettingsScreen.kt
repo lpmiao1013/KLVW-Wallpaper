@@ -55,14 +55,16 @@ import com.klvw.wallpaper.data.model.VideoSharpnessMode
 import com.klvw.wallpaper.ui.theme.SurfaceGlass
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 
+private enum class SettingsSubPage { None, Appearance, Advanced, Other }
+
 @Composable
 fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSharpnessLogs by remember { mutableStateOf(false) }
-    var showOtherFeatures by remember { mutableStateOf(false) }
+    var subPage by remember { mutableStateOf(SettingsSubPage.None) }
 
-    BackHandler(enabled = showOtherFeatures) { showOtherFeatures = false }
+    BackHandler(enabled = subPage != SettingsSubPage.None) { subPage = SettingsSubPage.None }
 
     if (showSharpnessLogs) {
         SharpnessLogDialog(
@@ -71,12 +73,31 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
         )
     }
 
-    if (showOtherFeatures) {
-        OtherFeaturesSettingsScreen(
-            popupViewModel = popupViewModel,
-            onBack = { showOtherFeatures = false }
-        )
-        return
+    when (subPage) {
+        SettingsSubPage.Appearance -> {
+            AppearanceSettingsScreen(
+                viewModel = viewModel,
+                popupViewModel = popupViewModel,
+                onBack = { subPage = SettingsSubPage.None }
+            )
+            return
+        }
+        SettingsSubPage.Advanced -> {
+            AdvancedSettingsScreen(
+                viewModel = viewModel,
+                popupViewModel = popupViewModel,
+                onBack = { subPage = SettingsSubPage.None }
+            )
+            return
+        }
+        SettingsSubPage.Other -> {
+            OtherFeaturesSettingsScreen(
+                popupViewModel = popupViewModel,
+                onBack = { subPage = SettingsSubPage.None }
+            )
+            return
+        }
+        SettingsSubPage.None -> Unit
     }
 
     Column(
@@ -91,29 +112,6 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
         CurrentSchemeBanner(viewModel = viewModel)
 
         SettingsGroupLabel("壁纸")
-        SettingsSection(title = "性能") {
-            SettingToggle(
-                icon = Icons.Default.Bolt,
-                title = "Vulkan GPU 渲染",
-                subtitle = "使用 Vulkan 进行硬件加速图片渲染",
-                checked = state.useVulkan,
-                onCheckedChange = { viewModel.setUseVulkan(it) }
-            )
-            HorizontalDivider(thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 4.dp))
-            val imageLoader = SingletonImageLoader.get(context)
-            var cacheCleared by remember { mutableStateOf(false) }
-            SettingAction(
-                icon = Icons.Default.DeleteSweep,
-                title = "清除缩略图缓存",
-                subtitle = if (cacheCleared) "缓存已清除" else "清除缩略图缓存，使替换后的文件显示最新内容",
-                onClick = {
-                    imageLoader.memoryCache?.clear()
-                    imageLoader.diskCache?.clear()
-                    cacheCleared = true
-                }
-            )
-        }
-
         SettingsSection(title = "壁纸显示") {
             WallpaperDisplaySection(
                 viewModel = viewModel,
@@ -172,63 +170,25 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
             }
         }
 
-        SettingsGroupLabel("界面")
-        SettingsSection(title = "状态栏图标") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("图标颜色", style = MaterialTheme.typography.bodyMedium)
-                    Text("强制覆盖状态栏图标明暗", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("auto" to "自动", "dark" to "深色", "light" to "浅色").forEach { (value, label) ->
-                            FilterChip(
-                                selected = state.forceIconColor == value,
-                                onClick = { viewModel.setForceIconColor(value) },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        SettingsSection(title = "KLVW 弹层菜单") {
-            KLVWPopupSection(popupViewModel = popupViewModel)
-        }
-
-        SettingsSection(title = "弹层外观") {
-            PopupAppearanceSection(popupViewModel = popupViewModel)
-        }
-
-        SettingsSection(title = "Aer 私密存储") {
-            AerStorageSection(popupViewModel)
-        }
-
         SettingsGroupLabel("更多")
-        SettingsSection(title = "其他功能") {
-            SettingAction(
+        SettingsSection(title = "入口") {
+            SettingsNavEntry(
+                icon = Icons.Default.Palette,
+                title = "外观设置",
+                subtitle = "状态栏图标、弹层菜单与弹层外观",
+                onClick = { subPage = SettingsSubPage.Appearance }
+            )
+            SettingsNavEntry(
+                icon = Icons.Default.Build,
+                title = "高级功能",
+                subtitle = "性能、私密存储与显示控制权限",
+                onClick = { subPage = SettingsSubPage.Advanced }
+            )
+            SettingsNavEntry(
                 icon = Icons.Default.Extension,
                 title = "其他功能",
                 subtitle = "快捷设置磁贴、手表与表盘配置",
-                onClick = { showOtherFeatures = true },
-                trailing = {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                onClick = { subPage = SettingsSubPage.Other }
             )
         }
 
@@ -271,11 +231,33 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
     }
 }
 
-/** Watch + Quick Set tile configs (preset / schedule / hide companions stay on main). */
 @Composable
-private fun OtherFeaturesSettingsScreen(
-    popupViewModel: KLVWPopupViewModel,
-    onBack: () -> Unit
+private fun SettingsNavEntry(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    SettingAction(
+        icon = icon,
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        trailing = {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    )
+}
+
+@Composable
+private fun SettingsSubPageScaffold(
+    title: String,
+    onBack: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -298,9 +280,83 @@ private fun OtherFeaturesSettingsScreen(
                 tint = MaterialTheme.colorScheme.primary
             )
             Spacer(Modifier.width(8.dp))
-            Text("其他功能", style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium)
         }
+        content()
+        Spacer(Modifier.height(80.dp))
+    }
+}
 
+@Composable
+private fun AppearanceSettingsScreen(
+    viewModel: WallpaperViewModel,
+    popupViewModel: KLVWPopupViewModel,
+    onBack: () -> Unit
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    SettingsSubPageScaffold(title = "外观设置", onBack = onBack) {
+        SettingsSection(title = "状态栏图标") {
+            StatusBarIconSection(
+                forceIconColor = state.forceIconColor,
+                onForceIconColor = { viewModel.setForceIconColor(it) }
+            )
+        }
+        SettingsSection(title = "KLVW 弹层菜单") {
+            KLVWPopupSection(popupViewModel = popupViewModel)
+        }
+        SettingsSection(title = "弹层外观") {
+            PopupAppearanceSection(popupViewModel = popupViewModel)
+        }
+    }
+}
+
+@Composable
+private fun AdvancedSettingsScreen(
+    viewModel: WallpaperViewModel,
+    popupViewModel: KLVWPopupViewModel,
+    onBack: () -> Unit
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    SettingsSubPageScaffold(title = "高级功能", onBack = onBack) {
+        SettingsSection(title = "性能") {
+            SettingToggle(
+                icon = Icons.Default.Bolt,
+                title = "Vulkan GPU 渲染",
+                subtitle = "使用 Vulkan 进行硬件加速图片渲染",
+                checked = state.useVulkan,
+                onCheckedChange = { viewModel.setUseVulkan(it) }
+            )
+            HorizontalDivider(thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 4.dp))
+            val imageLoader = SingletonImageLoader.get(context)
+            var cacheCleared by remember { mutableStateOf(false) }
+            SettingAction(
+                icon = Icons.Default.DeleteSweep,
+                title = "清除缩略图缓存",
+                subtitle = if (cacheCleared) "缓存已清除" else "清除缩略图缓存，使替换后的文件显示最新内容",
+                onClick = {
+                    imageLoader.memoryCache?.clear()
+                    imageLoader.diskCache?.clear()
+                    cacheCleared = true
+                }
+            )
+        }
+        SettingsSection(title = "显示控制权限") {
+            DisplayControlPermissionsSection()
+        }
+        SettingsSection(title = "Aer 私密存储") {
+            AerStorageSection(popupViewModel)
+        }
+    }
+}
+
+/** Watch + Quick Set tile configs (preset / schedule / hide companions stay on main). */
+@Composable
+private fun OtherFeaturesSettingsScreen(
+    popupViewModel: KLVWPopupViewModel,
+    onBack: () -> Unit
+) {
+    SettingsSubPageScaffold(title = "其他功能", onBack = onBack) {
         SettingsSection(title = "KLVW 快捷设置磁贴") {
             QuickSetTileSection(popupViewModel = popupViewModel)
         }
@@ -310,8 +366,40 @@ private fun OtherFeaturesSettingsScreen(
         SettingsSection(title = "KLVW 手表") {
             KLVWWatchSection(popupViewModel = popupViewModel)
         }
+    }
+}
 
-        Spacer(Modifier.height(80.dp))
+@Composable
+private fun StatusBarIconSection(
+    forceIconColor: String,
+    onForceIconColor: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("图标颜色", style = MaterialTheme.typography.bodyMedium)
+            Text("强制覆盖状态栏图标明暗", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("auto" to "自动", "dark" to "深色", "light" to "浅色").forEach { (value, label) ->
+                    FilterChip(
+                        selected = forceIconColor == value,
+                        onClick = { onForceIconColor(value) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -862,16 +950,8 @@ private fun PujieWatchFaceSection(popupViewModel: KLVWPopupViewModel) {
 }
 
 @Composable
-private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
+private fun DisplayControlPermissionsSection() {
     val context = LocalContext.current
-    val homeUnlock by popupViewModel.displayControlHome.collectAsStateWithLifecycle()
-    val lockUnlock by popupViewModel.displayControlLock.collectAsStateWithLifecycle()
-    val resetHomeTimer by popupViewModel.displayControlResetHomeTimer.collectAsStateWithLifecycle()
-    val resetLockTimer by popupViewModel.displayControlResetLockTimer.collectAsStateWithLifecycle()
-    val anyHomeEnabled = homeUnlock
-    val anyLockEnabled = lockUnlock
-
-    // Track permission state — re-evaluated on each recomposition (user may have just granted)
     var phoneStateGranted by remember { mutableStateOf(false) }
     var usageAccessGranted by remember { mutableStateOf(false) }
     var deviceAdminActive by remember { mutableStateOf(false) }
@@ -911,22 +991,25 @@ private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("权限", style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-
+        Text(
+            "解锁轮换等显示控制功能需要这些权限；不影响壁纸页与定时本身。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         listOf(
             Triple("Phone State", phoneStateGranted) { phoneStateRequest.launch(android.Manifest.permission.READ_PHONE_STATE) },
             Triple("Usage Access", usageAccessGranted) {
                 context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             },
             Triple("Device Admin", deviceAdminActive) {
-                val dpm = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
                 val adminComponent = android.content.ComponentName(context, com.klvw.wallpaper.tile.KLVWDeviceAdminReceiver::class.java)
                 context.startActivity(
                     Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
                         putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
-                        putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                            "Required for KLVW Display Control to read device lock state.")
+                        putExtra(
+                            android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                            "Required for KLVW Display Control to read device lock state."
+                        )
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                 )
@@ -949,12 +1032,30 @@ private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
                 }
             }
         }
+    }
+}
 
-        HorizontalDivider()
+@Composable
+private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
+    val homeUnlock by popupViewModel.displayControlHome.collectAsStateWithLifecycle()
+    val lockUnlock by popupViewModel.displayControlLock.collectAsStateWithLifecycle()
+    val resetHomeTimer by popupViewModel.displayControlResetHomeTimer.collectAsStateWithLifecycle()
+    val resetLockTimer by popupViewModel.displayControlResetLockTimer.collectAsStateWithLifecycle()
+    val anyHomeEnabled = homeUnlock
+    val anyLockEnabled = lockUnlock
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text("解锁时 — 轮换壁纸", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            "按屏幕开关；解锁时自动跟随当前桌面/锁屏是图片还是视频，再按优先级取文件夹（预设＞时段＞指定＞默认）。",
+            "按屏幕开关；解锁时自动跟随当前桌面/锁屏是图片还是视频，再按优先级取文件夹（预设＞时段＞指定＞默认）。权限请到「高级功能」授权。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
