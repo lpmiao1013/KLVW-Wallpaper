@@ -83,11 +83,26 @@ data class ScheduleGroup(
         private fun fromRuleOrNull(obj: JSONObject?): ScheduleRule? =
             obj?.let { ScheduleRule.fromJson(it) }
 
-        fun listFromJson(json: String): List<ScheduleGroup> = try {
-            val arr = JSONArray(json.ifBlank { "[]" })
-            (0 until arr.length()).map { fromJson(arr.getJSONObject(it)) }
-        } catch (_: Exception) {
-            emptyList()
+        // Same JSON string is re-parsed on every resolve (unlock/timer/QS); keep last parse.
+        @Volatile private var cachedJson: String? = null
+        @Volatile private var cachedGroups: List<ScheduleGroup> = emptyList()
+        private val parseLock = Any()
+
+        fun listFromJson(json: String): List<ScheduleGroup> {
+            val key = json.ifBlank { "[]" }
+            cachedJson?.let { if (it == key) return cachedGroups }
+            synchronized(parseLock) {
+                if (cachedJson == key) return cachedGroups
+                val parsed = try {
+                    val arr = JSONArray(key)
+                    (0 until arr.length()).map { fromJson(arr.getJSONObject(it)) }
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                cachedJson = key
+                cachedGroups = parsed
+                return parsed
+            }
         }
 
         fun List<ScheduleGroup>.toJsonString(): String =

@@ -108,13 +108,11 @@ class KLVWQuickSetActivity : ComponentActivity() {
     }
 
     private suspend fun pauseAllEnabledTimers(): List<String> {
-        val keys = listOf("home_image", "home_video", "lock_image", "lock_video")
+        val keys = listOf(WallpaperTimerManager.KEY_HOME, WallpaperTimerManager.KEY_LOCK)
             .filter { key ->
                 when (key) {
-                    "home_image" -> prefs.homeImageTimerEnabled.first()
-                    "home_video" -> prefs.homeVideoTimerEnabled.first()
-                    "lock_image" -> prefs.lockImageTimerEnabled.first()
-                    "lock_video" -> prefs.lockVideoTimerEnabled.first()
+                    WallpaperTimerManager.KEY_HOME -> prefs.homeTimerEnabled.first()
+                    WallpaperTimerManager.KEY_LOCK -> prefs.lockTimerEnabled.first()
                     else -> false
                 }
             }

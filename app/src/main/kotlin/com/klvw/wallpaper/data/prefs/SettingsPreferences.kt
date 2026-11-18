@@ -8,11 +8,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.klvw.wallpaper.data.model.FolderType
+import com.klvw.wallpaper.data.model.WallpaperTarget
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
@@ -83,7 +86,10 @@ class SettingsPreferences @Inject constructor(
         val QUICK_SET_WATCH_PRESET_ID = stringPreferencesKey("quick_set_watch_preset_id")
         // Double-tap on home live wallpaper to advance
         val DOUBLE_TAP_ENABLED = booleanPreferencesKey("double_tap_enabled")
-        // Display Control (on-unlock wallpaper cycling)
+        // Display Control (on-unlock wallpaper cycling) — screen-level; follows current media type.
+        val DISPLAY_CONTROL_HOME = booleanPreferencesKey("display_control_home")
+        val DISPLAY_CONTROL_LOCK = booleanPreferencesKey("display_control_lock")
+        // Legacy image/video unlock toggles (migrated into HOME/LOCK above).
         val DISPLAY_CONTROL_HOME_IMAGE = booleanPreferencesKey("display_control_home_image")
         val DISPLAY_CONTROL_HOME_VIDEO = booleanPreferencesKey("display_control_home_video")
         val DISPLAY_CONTROL_LOCK_IMAGE = booleanPreferencesKey("display_control_lock_image")
@@ -93,13 +99,20 @@ class SettingsPreferences @Inject constructor(
         val POPUP_SCALE_DISPLAY_CONTROL = booleanPreferencesKey("popup_scale_display_control")
         // Pujie Watch Face presets
         val PUJIE_WATCH_FACES_JSON = stringPreferencesKey("pujie_watch_faces_json")
-        // Timers
+        // Timers — screen-level; fire uses current homeIsVideo / lockIsVideo.
         val TIMER_UNLOCK_NOTIFICATION = booleanPreferencesKey("timer_unlock_notification")
         val TIMER_NOTIFICATION_ONLY_WHEN_RUNNING = booleanPreferencesKey("timer_notification_only_when_running")
         val PAUSE_TIMERS_ON_GLOBAL_OFF = booleanPreferencesKey("pause_timers_on_global_off")
         val GLOBAL_OFF_PAUSED_TIMERS = stringPreferencesKey("global_off_paused_timers")
         val KLVW_WATCH_ITEMS_JSON = stringPreferencesKey("klvw_watch_items_json")
         val WATCH_GLOBAL_OFF_VIBRATE = booleanPreferencesKey("watch_global_off_vibrate")
+        val HOME_TIMER_ENABLED = booleanPreferencesKey("home_timer_enabled")
+        val HOME_TIMER_INTERVAL_MIN = intPreferencesKey("home_timer_interval_min")
+        val HOME_TIMER_POL = booleanPreferencesKey("home_timer_pol")
+        val LOCK_TIMER_ENABLED = booleanPreferencesKey("lock_timer_enabled")
+        val LOCK_TIMER_INTERVAL_MIN = intPreferencesKey("lock_timer_interval_min")
+        val LOCK_TIMER_POL = booleanPreferencesKey("lock_timer_pol")
+        // Legacy per-media timers (migrated into HOME_/LOCK_ above).
         val HOME_IMAGE_TIMER_ENABLED = booleanPreferencesKey("home_image_timer_enabled")
         val HOME_IMAGE_TIMER_INTERVAL_MIN = intPreferencesKey("home_image_timer_interval_min")
         val HOME_VIDEO_TIMER_ENABLED = booleanPreferencesKey("home_video_timer_enabled")
@@ -111,7 +124,7 @@ class SettingsPreferences @Inject constructor(
         // Aer auto-lock settings
         val AER_UNMOUNT_ON_LOCK = booleanPreferencesKey("aer_unmount_on_lock")
         val AER_AUTO_UNMOUNT_MINUTES = intPreferencesKey("aer_auto_unmount_minutes")
-        // Pause on Lock (P.o.L) — per-timer setting
+        // Pause on Lock (P.o.L) — legacy per-media; migrated to HOME_TIMER_POL / LOCK_TIMER_POL
         val HOME_IMAGE_TIMER_POL = booleanPreferencesKey("home_image_timer_pol")
         val HOME_VIDEO_TIMER_POL = booleanPreferencesKey("home_video_timer_pol")
         val LOCK_IMAGE_TIMER_POL = booleanPreferencesKey("lock_image_timer_pol")
@@ -295,10 +308,15 @@ class SettingsPreferences @Inject constructor(
     val popupScaleTimer: Flow<Boolean> = context.dataStore.data.map { it[Keys.POPUP_SCALE_TIMER] ?: true }.distinctUntilChanged()
     val popupScaleFolderSelectAll: Flow<Boolean> = context.dataStore.data.map { it[Keys.POPUP_SCALE_FOLDER_SELECT_ALL] ?: true }.distinctUntilChanged()
     val doubleTapEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.DOUBLE_TAP_ENABLED] ?: false }.distinctUntilChanged()
-    val displayControlHomeImage: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_HOME_IMAGE] ?: false }.distinctUntilChanged()
-    val displayControlHomeVideo: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_HOME_VIDEO] ?: false }.distinctUntilChanged()
-    val displayControlLockImage: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] ?: false }.distinctUntilChanged()
-    val displayControlLockVideo: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] ?: false }.distinctUntilChanged()
+    /** Screen-level unlock rotate (follows current media type). Legacy image|video OR-migrated. */
+    val displayControlHome: Flow<Boolean> = context.dataStore.data.map { p ->
+        p[Keys.DISPLAY_CONTROL_HOME]
+            ?: ((p[Keys.DISPLAY_CONTROL_HOME_IMAGE] == true) || (p[Keys.DISPLAY_CONTROL_HOME_VIDEO] == true))
+    }.distinctUntilChanged()
+    val displayControlLock: Flow<Boolean> = context.dataStore.data.map { p ->
+        p[Keys.DISPLAY_CONTROL_LOCK]
+            ?: ((p[Keys.DISPLAY_CONTROL_LOCK_IMAGE] == true) || (p[Keys.DISPLAY_CONTROL_LOCK_VIDEO] == true))
+    }.distinctUntilChanged()
     val displayControlResetHomeTimer: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_RESET_HOME_TIMER] ?: false }.distinctUntilChanged()
     val displayControlResetLockTimer: Flow<Boolean> = context.dataStore.data.map { it[Keys.DISPLAY_CONTROL_RESET_LOCK_TIMER] ?: false }.distinctUntilChanged()
     val popupScaleDisplayControl: Flow<Boolean> = context.dataStore.data.map { it[Keys.POPUP_SCALE_DISPLAY_CONTROL] ?: true }.distinctUntilChanged()
@@ -318,21 +336,41 @@ class SettingsPreferences @Inject constructor(
         .map { it[Keys.KLVW_WATCH_ITEMS_JSON] ?: "[]" }.distinctUntilChanged()
     val watchGlobalOffVibrate: Flow<Boolean> = context.dataStore.data
         .map { it[Keys.WATCH_GLOBAL_OFF_VIBRATE] ?: false }.distinctUntilChanged()
-    val homeImageTimerEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.HOME_IMAGE_TIMER_ENABLED] ?: false }.distinctUntilChanged()
-    val homeImageTimerIntervalMin: Flow<Int> = context.dataStore.data.map { it[Keys.HOME_IMAGE_TIMER_INTERVAL_MIN] ?: 60 }.distinctUntilChanged()
-    val homeVideoTimerEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.HOME_VIDEO_TIMER_ENABLED] ?: false }.distinctUntilChanged()
-    val homeVideoTimerIntervalMin: Flow<Int> = context.dataStore.data.map { it[Keys.HOME_VIDEO_TIMER_INTERVAL_MIN] ?: 60 }.distinctUntilChanged()
-    val lockImageTimerEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_IMAGE_TIMER_ENABLED] ?: false }.distinctUntilChanged()
-    val lockImageTimerIntervalMin: Flow<Int> = context.dataStore.data.map { it[Keys.LOCK_IMAGE_TIMER_INTERVAL_MIN] ?: 60 }.distinctUntilChanged()
-    val lockVideoTimerEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_VIDEO_TIMER_ENABLED] ?: false }.distinctUntilChanged()
-    val lockVideoTimerIntervalMin: Flow<Int> = context.dataStore.data.map { it[Keys.LOCK_VIDEO_TIMER_INTERVAL_MIN] ?: 60 }.distinctUntilChanged()
+    val homeTimerEnabled: Flow<Boolean> = context.dataStore.data.map { p ->
+        p[Keys.HOME_TIMER_ENABLED]
+            ?: ((p[Keys.HOME_IMAGE_TIMER_ENABLED] == true) || (p[Keys.HOME_VIDEO_TIMER_ENABLED] == true))
+    }.distinctUntilChanged()
+    val homeTimerIntervalMin: Flow<Int> = context.dataStore.data.map { p ->
+        p[Keys.HOME_TIMER_INTERVAL_MIN]
+            ?: when {
+                p[Keys.HOME_VIDEO_TIMER_ENABLED] == true -> p[Keys.HOME_VIDEO_TIMER_INTERVAL_MIN]
+                else -> p[Keys.HOME_IMAGE_TIMER_INTERVAL_MIN]
+            }
+            ?: 60
+    }.distinctUntilChanged()
+    val homeTimerPauseOnLock: Flow<Boolean> = context.dataStore.data.map { p ->
+        p[Keys.HOME_TIMER_POL]
+            ?: ((p[Keys.HOME_IMAGE_TIMER_POL] == true) || (p[Keys.HOME_VIDEO_TIMER_POL] == true))
+    }.distinctUntilChanged()
+    val lockTimerEnabled: Flow<Boolean> = context.dataStore.data.map { p ->
+        p[Keys.LOCK_TIMER_ENABLED]
+            ?: ((p[Keys.LOCK_IMAGE_TIMER_ENABLED] == true) || (p[Keys.LOCK_VIDEO_TIMER_ENABLED] == true))
+    }.distinctUntilChanged()
+    val lockTimerIntervalMin: Flow<Int> = context.dataStore.data.map { p ->
+        p[Keys.LOCK_TIMER_INTERVAL_MIN]
+            ?: when {
+                p[Keys.LOCK_VIDEO_TIMER_ENABLED] == true -> p[Keys.LOCK_VIDEO_TIMER_INTERVAL_MIN]
+                else -> p[Keys.LOCK_IMAGE_TIMER_INTERVAL_MIN]
+            }
+            ?: 60
+    }.distinctUntilChanged()
+    val lockTimerPauseOnLock: Flow<Boolean> = context.dataStore.data.map { p ->
+        p[Keys.LOCK_TIMER_POL]
+            ?: ((p[Keys.LOCK_IMAGE_TIMER_POL] == true) || (p[Keys.LOCK_VIDEO_TIMER_POL] == true))
+    }.distinctUntilChanged()
     val pujieWatchFacesJson: Flow<String> = context.dataStore.data.map { it[Keys.PUJIE_WATCH_FACES_JSON] ?: "[]" }.distinctUntilChanged()
     val aerUnmountOnLock: Flow<Boolean> = context.dataStore.data.map { it[Keys.AER_UNMOUNT_ON_LOCK] ?: false }.distinctUntilChanged()
     val aerAutoUnmountMinutes: Flow<Int> = context.dataStore.data.map { it[Keys.AER_AUTO_UNMOUNT_MINUTES] ?: 0 }.distinctUntilChanged()
-    val homeImageTimerPauseOnLock: Flow<Boolean> = context.dataStore.data.map { it[Keys.HOME_IMAGE_TIMER_POL] ?: false }.distinctUntilChanged()
-    val homeVideoTimerPauseOnLock: Flow<Boolean> = context.dataStore.data.map { it[Keys.HOME_VIDEO_TIMER_POL] ?: false }.distinctUntilChanged()
-    val lockImageTimerPauseOnLock: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_IMAGE_TIMER_POL] ?: false }.distinctUntilChanged()
-    val lockVideoTimerPauseOnLock: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_VIDEO_TIMER_POL] ?: false }.distinctUntilChanged()
     val polPausedTimers: Flow<Set<String>> = context.dataStore.data.map { prefs ->
         prefs[Keys.POL_PAUSED_TIMERS]?.split(",")?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     }.distinctUntilChanged()
@@ -607,58 +645,73 @@ class SettingsPreferences @Inject constructor(
     }
 
     /**
-     * Unlock Display Control: home image/video and lock image/video are mutually
-     * exclusive within each screen — enabling one clears the sibling so both
-     * cannot fight over the same home/lock wallpaper slot.
+     * Unlock Display Control — screen-level (`home` / `lock`).
+     * Legacy `home_image` etc. map to the same screen flag.
      */
     suspend fun setDisplayControl(key: String, enabled: Boolean) {
+        val screen = when (key) {
+            "home", "home_image", "home_video" -> "home"
+            "lock", "lock_image", "lock_video" -> "lock"
+            else -> return
+        }
         context.dataStore.edit {
-            when (key) {
-                "home_image" -> {
-                    it[Keys.DISPLAY_CONTROL_HOME_IMAGE] = enabled
-                    if (enabled) it[Keys.DISPLAY_CONTROL_HOME_VIDEO] = false
-                }
-                "home_video" -> {
-                    it[Keys.DISPLAY_CONTROL_HOME_VIDEO] = enabled
-                    if (enabled) it[Keys.DISPLAY_CONTROL_HOME_IMAGE] = false
-                }
-                "lock_image" -> {
-                    it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] = enabled
-                    if (enabled) it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] = false
-                }
-                "lock_video" -> {
-                    it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] = enabled
-                    if (enabled) it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] = false
-                }
+            if (screen == "home") {
+                it[Keys.DISPLAY_CONTROL_HOME] = enabled
+                it.remove(Keys.DISPLAY_CONTROL_HOME_IMAGE)
+                it.remove(Keys.DISPLAY_CONTROL_HOME_VIDEO)
+            } else {
+                it[Keys.DISPLAY_CONTROL_LOCK] = enabled
+                it.remove(Keys.DISPLAY_CONTROL_LOCK_IMAGE)
+                it.remove(Keys.DISPLAY_CONTROL_LOCK_VIDEO)
             }
         }
     }
 
     /**
-     * Clear legacy "both image and video on" for unlock + timers (prefer image).
+     * Migrate legacy image/video unlock+timer flags into screen-level keys.
      * Safe to call on every process start.
      */
     suspend fun reconcileImageVideoMutex() {
         context.dataStore.edit {
-            if ((it[Keys.DISPLAY_CONTROL_HOME_IMAGE] == true) &&
-                (it[Keys.DISPLAY_CONTROL_HOME_VIDEO] == true)
-            ) {
-                it[Keys.DISPLAY_CONTROL_HOME_VIDEO] = false
+            if (it[Keys.DISPLAY_CONTROL_HOME] == null) {
+                val on = (it[Keys.DISPLAY_CONTROL_HOME_IMAGE] == true) ||
+                    (it[Keys.DISPLAY_CONTROL_HOME_VIDEO] == true)
+                it[Keys.DISPLAY_CONTROL_HOME] = on
             }
-            if ((it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] == true) &&
-                (it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] == true)
-            ) {
-                it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] = false
+            if (it[Keys.DISPLAY_CONTROL_LOCK] == null) {
+                val on = (it[Keys.DISPLAY_CONTROL_LOCK_IMAGE] == true) ||
+                    (it[Keys.DISPLAY_CONTROL_LOCK_VIDEO] == true)
+                it[Keys.DISPLAY_CONTROL_LOCK] = on
             }
-            if ((it[Keys.HOME_IMAGE_TIMER_ENABLED] == true) &&
-                (it[Keys.HOME_VIDEO_TIMER_ENABLED] == true)
-            ) {
-                it[Keys.HOME_VIDEO_TIMER_ENABLED] = false
+            if (it[Keys.HOME_TIMER_ENABLED] == null) {
+                val img = it[Keys.HOME_IMAGE_TIMER_ENABLED] == true
+                val vid = it[Keys.HOME_VIDEO_TIMER_ENABLED] == true
+                it[Keys.HOME_TIMER_ENABLED] = img || vid
+                if (it[Keys.HOME_TIMER_INTERVAL_MIN] == null) {
+                    it[Keys.HOME_TIMER_INTERVAL_MIN] = when {
+                        vid -> it[Keys.HOME_VIDEO_TIMER_INTERVAL_MIN] ?: 60
+                        else -> it[Keys.HOME_IMAGE_TIMER_INTERVAL_MIN] ?: 60
+                    }
+                }
+                if (it[Keys.HOME_TIMER_POL] == null) {
+                    it[Keys.HOME_TIMER_POL] =
+                        (it[Keys.HOME_IMAGE_TIMER_POL] == true) || (it[Keys.HOME_VIDEO_TIMER_POL] == true)
+                }
             }
-            if ((it[Keys.LOCK_IMAGE_TIMER_ENABLED] == true) &&
-                (it[Keys.LOCK_VIDEO_TIMER_ENABLED] == true)
-            ) {
-                it[Keys.LOCK_VIDEO_TIMER_ENABLED] = false
+            if (it[Keys.LOCK_TIMER_ENABLED] == null) {
+                val img = it[Keys.LOCK_IMAGE_TIMER_ENABLED] == true
+                val vid = it[Keys.LOCK_VIDEO_TIMER_ENABLED] == true
+                it[Keys.LOCK_TIMER_ENABLED] = img || vid
+                if (it[Keys.LOCK_TIMER_INTERVAL_MIN] == null) {
+                    it[Keys.LOCK_TIMER_INTERVAL_MIN] = when {
+                        vid -> it[Keys.LOCK_VIDEO_TIMER_INTERVAL_MIN] ?: 60
+                        else -> it[Keys.LOCK_IMAGE_TIMER_INTERVAL_MIN] ?: 60
+                    }
+                }
+                if (it[Keys.LOCK_TIMER_POL] == null) {
+                    it[Keys.LOCK_TIMER_POL] =
+                        (it[Keys.LOCK_IMAGE_TIMER_POL] == true) || (it[Keys.LOCK_VIDEO_TIMER_POL] == true)
+                }
             }
         }
     }
@@ -727,41 +780,35 @@ class SettingsPreferences @Inject constructor(
         context.dataStore.edit { it[Keys.WATCH_GLOBAL_OFF_VIBRATE] = enabled }
     }
 
-    /**
-     * Timers: same per-screen image/video mutex as Display Control.
-     * Enabling home/lock image timer turns off that screen's video timer, and vice versa.
-     */
+    /** Timers are screen-level (`home` / `lock`); media type is chosen at fire time. */
     suspend fun setTimerEnabled(key: String, enabled: Boolean) {
+        val screen = when (key) {
+            "home", "home_image", "home_video" -> "home"
+            "lock", "lock_image", "lock_video" -> "lock"
+            else -> return
+        }
         context.dataStore.edit {
-            when (key) {
-                "home_image" -> {
-                    it[Keys.HOME_IMAGE_TIMER_ENABLED] = enabled
-                    if (enabled) it[Keys.HOME_VIDEO_TIMER_ENABLED] = false
-                }
-                "home_video" -> {
-                    it[Keys.HOME_VIDEO_TIMER_ENABLED] = enabled
-                    if (enabled) it[Keys.HOME_IMAGE_TIMER_ENABLED] = false
-                }
-                "lock_image" -> {
-                    it[Keys.LOCK_IMAGE_TIMER_ENABLED] = enabled
-                    if (enabled) it[Keys.LOCK_VIDEO_TIMER_ENABLED] = false
-                }
-                "lock_video" -> {
-                    it[Keys.LOCK_VIDEO_TIMER_ENABLED] = enabled
-                    if (enabled) it[Keys.LOCK_IMAGE_TIMER_ENABLED] = false
-                }
+            if (screen == "home") {
+                it[Keys.HOME_TIMER_ENABLED] = enabled
+                it.remove(Keys.HOME_IMAGE_TIMER_ENABLED)
+                it.remove(Keys.HOME_VIDEO_TIMER_ENABLED)
+            } else {
+                it[Keys.LOCK_TIMER_ENABLED] = enabled
+                it.remove(Keys.LOCK_IMAGE_TIMER_ENABLED)
+                it.remove(Keys.LOCK_VIDEO_TIMER_ENABLED)
             }
         }
     }
 
     suspend fun setTimerInterval(key: String, minutes: Int) {
+        val screen = when (key) {
+            "home", "home_image", "home_video" -> "home"
+            "lock", "lock_image", "lock_video" -> "lock"
+            else -> return
+        }
         context.dataStore.edit {
-            when (key) {
-                "home_image" -> it[Keys.HOME_IMAGE_TIMER_INTERVAL_MIN] = minutes
-                "home_video" -> it[Keys.HOME_VIDEO_TIMER_INTERVAL_MIN] = minutes
-                "lock_image" -> it[Keys.LOCK_IMAGE_TIMER_INTERVAL_MIN] = minutes
-                "lock_video" -> it[Keys.LOCK_VIDEO_TIMER_INTERVAL_MIN] = minutes
-            }
+            if (screen == "home") it[Keys.HOME_TIMER_INTERVAL_MIN] = minutes
+            else it[Keys.LOCK_TIMER_INTERVAL_MIN] = minutes
         }
     }
 
@@ -778,12 +825,20 @@ class SettingsPreferences @Inject constructor(
     }
 
     suspend fun setTimerPauseOnLock(key: String, enabled: Boolean) {
+        val screen = when (key) {
+            "home", "home_image", "home_video" -> "home"
+            "lock", "lock_image", "lock_video" -> "lock"
+            else -> return
+        }
         context.dataStore.edit {
-            when (key) {
-                "home_image" -> it[Keys.HOME_IMAGE_TIMER_POL] = enabled
-                "home_video" -> it[Keys.HOME_VIDEO_TIMER_POL] = enabled
-                "lock_image" -> it[Keys.LOCK_IMAGE_TIMER_POL] = enabled
-                "lock_video" -> it[Keys.LOCK_VIDEO_TIMER_POL] = enabled
+            if (screen == "home") {
+                it[Keys.HOME_TIMER_POL] = enabled
+                it.remove(Keys.HOME_IMAGE_TIMER_POL)
+                it.remove(Keys.HOME_VIDEO_TIMER_POL)
+            } else {
+                it[Keys.LOCK_TIMER_POL] = enabled
+                it.remove(Keys.LOCK_IMAGE_TIMER_POL)
+                it.remove(Keys.LOCK_VIDEO_TIMER_POL)
             }
         }
     }
@@ -910,4 +965,55 @@ class SettingsPreferences @Inject constructor(
     suspend fun setShowHiddenFolders(show: Boolean) {
         context.dataStore.edit { it[Keys.SHOW_HIDDEN_FOLDERS] = show }
     }
+
+    /** Single DataStore read for scheme resolution / banners. */
+    suspend fun snapshot(): PrefsSnapshot {
+        val p = context.dataStore.data.first()
+        return PrefsSnapshot(
+            presetEnabled = p[Keys.PRESET_ENABLED] ?: false,
+            scheduleEnabled = p[Keys.SCHEDULE_ENABLED] ?: false,
+            scheduleActiveGroupId = p[Keys.SCHEDULE_ACTIVE_GROUP_ID],
+            scheduleGroupsJson = p[Keys.SCHEDULE_GROUPS_JSON] ?: "[]",
+            activeHomeImage = p[Keys.ACTIVE_HOME_IMAGE_FOLDER_URI] ?: p[Keys.ACTIVE_IMAGE_FOLDER_URI],
+            activeHomeVideo = p[Keys.ACTIVE_HOME_VIDEO_FOLDER_URI] ?: p[Keys.ACTIVE_VIDEO_FOLDER_URI],
+            activeLockImage = p[Keys.ACTIVE_LOCK_IMAGE_FOLDER_URI],
+            activeLockVideo = p[Keys.ACTIVE_LOCK_VIDEO_FOLDER_URI],
+            defaultHomeImage = p[Keys.DEFAULT_HOME_IMAGE_FOLDER_URI],
+            defaultHomeVideo = p[Keys.DEFAULT_HOME_VIDEO_FOLDER_URI],
+            defaultLockImage = p[Keys.DEFAULT_LOCK_IMAGE_FOLDER_URI],
+            defaultLockVideo = p[Keys.DEFAULT_LOCK_VIDEO_FOLDER_URI]
+        )
+    }
+}
+
+/** Immutable prefs slice for [com.klvw.wallpaper.scheme.WallpaperSchemeResolver]. */
+data class PrefsSnapshot(
+    val presetEnabled: Boolean,
+    val scheduleEnabled: Boolean,
+    val scheduleActiveGroupId: String?,
+    val scheduleGroupsJson: String,
+    val activeHomeImage: String?,
+    val activeHomeVideo: String?,
+    val activeLockImage: String?,
+    val activeLockVideo: String?,
+    val defaultHomeImage: String?,
+    val defaultHomeVideo: String?,
+    val defaultLockImage: String?,
+    val defaultLockVideo: String?
+) {
+    fun activeFolder(target: WallpaperTarget, type: FolderType): String? = when {
+        target == WallpaperTarget.HOME && type == FolderType.IMAGE -> activeHomeImage
+        target == WallpaperTarget.HOME && type == FolderType.VIDEO -> activeHomeVideo
+        target == WallpaperTarget.LOCK && type == FolderType.IMAGE -> activeLockImage
+        target == WallpaperTarget.LOCK && type == FolderType.VIDEO -> activeLockVideo
+        else -> null
+    }?.takeIf { it.isNotBlank() }
+
+    fun defaultFolder(target: WallpaperTarget, type: FolderType): String? = when {
+        target == WallpaperTarget.HOME && type == FolderType.IMAGE -> defaultHomeImage
+        target == WallpaperTarget.HOME && type == FolderType.VIDEO -> defaultHomeVideo
+        target == WallpaperTarget.LOCK && type == FolderType.IMAGE -> defaultLockImage
+        target == WallpaperTarget.LOCK && type == FolderType.VIDEO -> defaultLockVideo
+        else -> null
+    }?.takeIf { it.isNotBlank() }
 }

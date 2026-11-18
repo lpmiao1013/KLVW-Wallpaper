@@ -107,14 +107,10 @@ class KLVWPopupViewModel @Inject constructor(
     // Timer state
     val timerPaused: StateFlow<Map<String, Boolean>> = timerManager.paused
     val timerNextFireTimes: StateFlow<Map<String, Long>> = timerManager.nextFireTimes
-    // Display Control
-    val displayControlHomeImage: StateFlow<Boolean> = prefs.displayControlHomeImage
+    // Display Control (screen-level; follows current media type at unlock)
+    val displayControlHome: StateFlow<Boolean> = prefs.displayControlHome
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val displayControlHomeVideo: StateFlow<Boolean> = prefs.displayControlHomeVideo
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val displayControlLockImage: StateFlow<Boolean> = prefs.displayControlLockImage
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val displayControlLockVideo: StateFlow<Boolean> = prefs.displayControlLockVideo
+    val displayControlLock: StateFlow<Boolean> = prefs.displayControlLock
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val popupScaleDisplayControl: StateFlow<Boolean> = prefs.popupScaleDisplayControl
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -128,29 +124,17 @@ class KLVWPopupViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val pauseTimersOnGlobalOff: StateFlow<Boolean> = prefs.pauseTimersOnGlobalOff
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val homeImageTimerEnabled: StateFlow<Boolean> = prefs.homeImageTimerEnabled
+    val homeTimerEnabled: StateFlow<Boolean> = prefs.homeTimerEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val homeImageTimerIntervalMin: StateFlow<Int> = prefs.homeImageTimerIntervalMin
+    val homeTimerIntervalMin: StateFlow<Int> = prefs.homeTimerIntervalMin
         .stateIn(viewModelScope, SharingStarted.Eagerly, 60)
-    val homeVideoTimerEnabled: StateFlow<Boolean> = prefs.homeVideoTimerEnabled
+    val lockTimerEnabled: StateFlow<Boolean> = prefs.lockTimerEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val homeVideoTimerIntervalMin: StateFlow<Int> = prefs.homeVideoTimerIntervalMin
+    val lockTimerIntervalMin: StateFlow<Int> = prefs.lockTimerIntervalMin
         .stateIn(viewModelScope, SharingStarted.Eagerly, 60)
-    val lockImageTimerEnabled: StateFlow<Boolean> = prefs.lockImageTimerEnabled
+    val homeTimerPauseOnLock: StateFlow<Boolean> = prefs.homeTimerPauseOnLock
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val lockImageTimerIntervalMin: StateFlow<Int> = prefs.lockImageTimerIntervalMin
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 60)
-    val lockVideoTimerEnabled: StateFlow<Boolean> = prefs.lockVideoTimerEnabled
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val lockVideoTimerIntervalMin: StateFlow<Int> = prefs.lockVideoTimerIntervalMin
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 60)
-    val homeImageTimerPauseOnLock: StateFlow<Boolean> = prefs.homeImageTimerPauseOnLock
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val homeVideoTimerPauseOnLock: StateFlow<Boolean> = prefs.homeVideoTimerPauseOnLock
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val lockImageTimerPauseOnLock: StateFlow<Boolean> = prefs.lockImageTimerPauseOnLock
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val lockVideoTimerPauseOnLock: StateFlow<Boolean> = prefs.lockVideoTimerPauseOnLock
+    val lockTimerPauseOnLock: StateFlow<Boolean> = prefs.lockTimerPauseOnLock
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val pujieWatchFaces: StateFlow<List<PujieWatchFacePreset>> = prefs.pujieWatchFacesJson
@@ -264,13 +248,12 @@ class KLVWPopupViewModel @Inject constructor(
                 val wantVideo = item.actionType == POPUP_ACTION_RANDOM_VIDEO
                 for (screen in screens) {
                     val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
-                    // Explicit item folder wins when schedule/preset are off; otherwise use stack.
-                    val folderUri = when {
-                        scheduleManager.isEnabled() || prefs.presetEnabled.first() ->
-                            scheduleManager.resolveFolderUri(screen, type)
-                        item.folderUri.isNotBlank() -> item.folderUri
-                        else -> scheduleManager.resolveFolderUri(screen, type)
-                    } ?: continue
+                    val folderUri = if (
+                        item.folderUri.isNotBlank() &&
+                        !prefs.presetEnabled.first() &&
+                        !scheduleManager.isEnabled()
+                    ) item.folderUri else scheduleManager.resolveFolderUri(screen, type)
+                        ?: continue
                     val wallpaperItem = shuffleHistoryManager.pickNext(
                         folderRepository.getItemsFromFolder(folderUri, type), folderUri, type
                     ) ?: continue

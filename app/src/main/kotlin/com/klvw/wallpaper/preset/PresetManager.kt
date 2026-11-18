@@ -37,8 +37,7 @@ class PresetManager @Inject constructor(
             prefs.setPresetEnabled(true)
         }
         applyPresetWallpapers()?.let { return it }
-        alignMutex(WallpaperTarget.HOME, prefs.presetHomeIsVideo.first())
-        alignMutex(WallpaperTarget.LOCK, prefs.presetLockIsVideo.first())
+        // homeIsVideo/lockIsVideo updated by setWallpaper; unlock/timer follow current type.
         return null
     }
 
@@ -172,28 +171,6 @@ class PresetManager @Inject constructor(
         )
     } catch (_: Exception) {
         null
-    }
-
-    private suspend fun alignMutex(target: WallpaperTarget, isVideo: Boolean) {
-        val screen = if (target == WallpaperTarget.LOCK) "lock" else "home"
-        val imageKey = "${screen}_image"
-        val videoKey = "${screen}_video"
-        val imageTimerOn = when (target) {
-            WallpaperTarget.HOME -> prefs.homeImageTimerEnabled.first()
-            else -> prefs.lockImageTimerEnabled.first()
-        }
-        val videoTimerOn = when (target) {
-            WallpaperTarget.HOME -> prefs.homeVideoTimerEnabled.first()
-            else -> prefs.lockVideoTimerEnabled.first()
-        }
-        val anyTimer = imageTimerOn || videoTimerOn
-        if (!isVideo) {
-            prefs.setDisplayControl(imageKey, true)
-            if (anyTimer) prefs.setTimerEnabled(imageKey, true)
-        } else {
-            prefs.setDisplayControl(videoKey, true)
-            if (anyTimer) prefs.setTimerEnabled(videoKey, true)
-        }
     }
 
     private data class History(

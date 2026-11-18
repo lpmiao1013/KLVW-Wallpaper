@@ -91,22 +91,14 @@ fun KLVWPopupScreen(
     val defaultLockVideoFolderUri by viewModel.defaultLockVideoFolderUri.collectAsStateWithLifecycle()
     val timerPaused by viewModel.timerPaused.collectAsStateWithLifecycle()
     val timerNextFireTimes by viewModel.timerNextFireTimes.collectAsStateWithLifecycle()
-    val homeImageTimerEnabled by viewModel.homeImageTimerEnabled.collectAsStateWithLifecycle()
-    val homeImageTimerIntervalMin by viewModel.homeImageTimerIntervalMin.collectAsStateWithLifecycle()
-    val homeVideoTimerEnabled by viewModel.homeVideoTimerEnabled.collectAsStateWithLifecycle()
-    val homeVideoTimerIntervalMin by viewModel.homeVideoTimerIntervalMin.collectAsStateWithLifecycle()
-    val lockImageTimerEnabled by viewModel.lockImageTimerEnabled.collectAsStateWithLifecycle()
-    val lockImageTimerIntervalMin by viewModel.lockImageTimerIntervalMin.collectAsStateWithLifecycle()
-    val lockVideoTimerEnabled by viewModel.lockVideoTimerEnabled.collectAsStateWithLifecycle()
-    val lockVideoTimerIntervalMin by viewModel.lockVideoTimerIntervalMin.collectAsStateWithLifecycle()
-    val homeImageTimerPauseOnLock by viewModel.homeImageTimerPauseOnLock.collectAsStateWithLifecycle()
-    val homeVideoTimerPauseOnLock by viewModel.homeVideoTimerPauseOnLock.collectAsStateWithLifecycle()
-    val lockImageTimerPauseOnLock by viewModel.lockImageTimerPauseOnLock.collectAsStateWithLifecycle()
-    val lockVideoTimerPauseOnLock by viewModel.lockVideoTimerPauseOnLock.collectAsStateWithLifecycle()
-    val displayControlHomeImage by viewModel.displayControlHomeImage.collectAsStateWithLifecycle()
-    val displayControlHomeVideo by viewModel.displayControlHomeVideo.collectAsStateWithLifecycle()
-    val displayControlLockImage by viewModel.displayControlLockImage.collectAsStateWithLifecycle()
-    val displayControlLockVideo by viewModel.displayControlLockVideo.collectAsStateWithLifecycle()
+    val homeTimerEnabled by viewModel.homeTimerEnabled.collectAsStateWithLifecycle()
+    val homeTimerIntervalMin by viewModel.homeTimerIntervalMin.collectAsStateWithLifecycle()
+    val lockTimerEnabled by viewModel.lockTimerEnabled.collectAsStateWithLifecycle()
+    val lockTimerIntervalMin by viewModel.lockTimerIntervalMin.collectAsStateWithLifecycle()
+    val homeTimerPauseOnLock by viewModel.homeTimerPauseOnLock.collectAsStateWithLifecycle()
+    val lockTimerPauseOnLock by viewModel.lockTimerPauseOnLock.collectAsStateWithLifecycle()
+    val displayControlHome by viewModel.displayControlHome.collectAsStateWithLifecycle()
+    val displayControlLock by viewModel.displayControlLock.collectAsStateWithLifecycle()
     val displayControlResetHomeTimer by viewModel.displayControlResetHomeTimer.collectAsStateWithLifecycle()
     val displayControlResetLockTimer by viewModel.displayControlResetLockTimer.collectAsStateWithLifecycle()
     val popupScaleDisplayControl by viewModel.popupScaleDisplayControl.collectAsStateWithLifecycle()
@@ -378,19 +370,13 @@ fun KLVWPopupScreen(
                 scaleToPopupWidth = popupScaleTimer,
                 timerPaused = timerPaused,
                 nextFireTimes = timerNextFireTimes,
-                homeImageEnabled = homeImageTimerEnabled,
-                homeImageIntervalMin = homeImageTimerIntervalMin,
-                homeVideoEnabled = homeVideoTimerEnabled,
-                homeVideoIntervalMin = homeVideoTimerIntervalMin,
-                lockImageEnabled = lockImageTimerEnabled,
-                lockImageIntervalMin = lockImageTimerIntervalMin,
-                lockVideoEnabled = lockVideoTimerEnabled,
-                lockVideoIntervalMin = lockVideoTimerIntervalMin,
+                homeEnabled = homeTimerEnabled,
+                homeIntervalMin = homeTimerIntervalMin,
+                lockEnabled = lockTimerEnabled,
+                lockIntervalMin = lockTimerIntervalMin,
                 pauseOnLock = mapOf(
-                    "home_image" to homeImageTimerPauseOnLock,
-                    "home_video" to homeVideoTimerPauseOnLock,
-                    "lock_image" to lockImageTimerPauseOnLock,
-                    "lock_video" to lockVideoTimerPauseOnLock
+                    "home" to homeTimerPauseOnLock,
+                    "lock" to lockTimerPauseOnLock
                 ),
                 onToggleEnabled = { key, enabled -> viewModel.setTimerEnabled(key, enabled) },
                 onSetInterval = { key, min -> viewModel.setTimerInterval(key, min) },
@@ -409,10 +395,8 @@ fun KLVWPopupScreen(
                 secondaryTextColor = secondaryTextColor,
                 popupWidthFraction = popupWidthFraction,
                 scaleToPopupWidth = popupScaleDisplayControl,
-                homeImageEnabled = displayControlHomeImage,
-                homeVideoEnabled = displayControlHomeVideo,
-                lockImageEnabled = displayControlLockImage,
-                lockVideoEnabled = displayControlLockVideo,
+                homeEnabled = displayControlHome,
+                lockEnabled = displayControlLock,
                 resetHomeTimer = displayControlResetHomeTimer,
                 resetLockTimer = displayControlResetLockTimer,
                 onToggle = { key, enabled -> viewModel.setDisplayControl(key, enabled) },
@@ -603,14 +587,10 @@ private fun TimerControlOverlay(
     scaleToPopupWidth: Boolean,
     timerPaused: Map<String, Boolean>,
     nextFireTimes: Map<String, Long>,
-    homeImageEnabled: Boolean,
-    homeImageIntervalMin: Int,
-    homeVideoEnabled: Boolean,
-    homeVideoIntervalMin: Int,
-    lockImageEnabled: Boolean,
-    lockImageIntervalMin: Int,
-    lockVideoEnabled: Boolean,
-    lockVideoIntervalMin: Int,
+    homeEnabled: Boolean,
+    homeIntervalMin: Int,
+    lockEnabled: Boolean,
+    lockIntervalMin: Int,
     pauseOnLock: Map<String, Boolean>,
     onToggleEnabled: (String, Boolean) -> Unit,
     onSetInterval: (String, Int) -> Unit,
@@ -620,10 +600,8 @@ private fun TimerControlOverlay(
     onDismiss: () -> Unit
 ) {
     val timers = listOf(
-        TimerRow("home_image", "桌面图片", homeImageEnabled, homeImageIntervalMin),
-        TimerRow("home_video", "桌面视频", homeVideoEnabled, homeVideoIntervalMin),
-        TimerRow("lock_image", "锁屏图片", lockImageEnabled, lockImageIntervalMin),
-        TimerRow("lock_video", "锁屏视频", lockVideoEnabled, lockVideoIntervalMin)
+        TimerRow("home", "桌面定时", homeEnabled, homeIntervalMin),
+        TimerRow("lock", "锁屏定时", lockEnabled, lockIntervalMin)
     )
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -1212,10 +1190,8 @@ private fun DisplayControlOverlay(
     secondaryTextColor: Color,
     popupWidthFraction: Float,
     scaleToPopupWidth: Boolean,
-    homeImageEnabled: Boolean,
-    homeVideoEnabled: Boolean,
-    lockImageEnabled: Boolean,
-    lockVideoEnabled: Boolean,
+    homeEnabled: Boolean,
+    lockEnabled: Boolean,
     resetHomeTimer: Boolean,
     resetLockTimer: Boolean,
     onToggle: (String, Boolean) -> Unit,
@@ -1224,13 +1200,11 @@ private fun DisplayControlOverlay(
     onDismiss: () -> Unit
 ) {
     val rows = listOf(
-        Triple("home_image", "桌面图片", homeImageEnabled),
-        Triple("home_video", "桌面视频", homeVideoEnabled),
-        Triple("lock_image", "锁屏图片", lockImageEnabled),
-        Triple("lock_video", "锁屏视频", lockVideoEnabled)
+        Triple("home", "桌面解锁轮换", homeEnabled),
+        Triple("lock", "锁屏解锁轮换", lockEnabled)
     )
-    val anyHomeEnabled = homeImageEnabled || homeVideoEnabled
-    val anyLockEnabled = lockImageEnabled || lockVideoEnabled
+    val anyHomeEnabled = homeEnabled
+    val anyLockEnabled = lockEnabled
     PopupOverlay(onDismiss = onDismiss) {
         Box(
             modifier = Modifier
@@ -1264,7 +1238,7 @@ private fun DisplayControlOverlay(
                     }
                 }
                 Text(
-                    "每次解锁时轮换壁纸。同一屏幕图片与视频只能开一个。",
+                    "按屏幕开关；解锁时自动跟随当前是图片还是视频，再按优先级取文件夹。",
                     style = MaterialTheme.typography.bodySmall,
                     color = secondaryTextColor
                 )

@@ -160,7 +160,7 @@ class ScheduleManager @Inject constructor(
         val group = activeGroup() ?: return
         for (target in listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)) {
             val rule = ScheduleMath.hit(group.rules, target, ScheduleMath.minuteOfDay()) ?: continue
-            alignMutex(target, rule.media)
+            // Wallpaper set updates homeIsVideo/lockIsVideo; unlock/timer follow that type.
             if (pick) pickAndSet(rule)
         }
     }
@@ -173,7 +173,6 @@ class ScheduleManager @Inject constructor(
                 else -> false
             }
             val type = if (isVideo) FolderType.VIDEO else FolderType.IMAGE
-            // Same stack as timers/double-tap: active tabbar folder, else per-screen default.
             val uri = resolveFolderUri(target, type) ?: continue
             pickAndSet(
                 ScheduleRule(
@@ -184,28 +183,6 @@ class ScheduleManager @Inject constructor(
                     endMinute = 1439
                 )
             )
-        }
-    }
-
-    private suspend fun alignMutex(target: WallpaperTarget, media: FolderType) {
-        val screen = if (target == WallpaperTarget.LOCK) "lock" else "home"
-        val imageKey = "${screen}_image"
-        val videoKey = "${screen}_video"
-        val imageTimerOn = when (target) {
-            WallpaperTarget.HOME -> prefs.homeImageTimerEnabled.first()
-            else -> prefs.lockImageTimerEnabled.first()
-        }
-        val videoTimerOn = when (target) {
-            WallpaperTarget.HOME -> prefs.homeVideoTimerEnabled.first()
-            else -> prefs.lockVideoTimerEnabled.first()
-        }
-        val anyTimer = imageTimerOn || videoTimerOn
-        if (media == FolderType.IMAGE) {
-            prefs.setDisplayControl(imageKey, true)
-            if (anyTimer) prefs.setTimerEnabled(imageKey, true)
-        } else {
-            prefs.setDisplayControl(videoKey, true)
-            if (anyTimer) prefs.setTimerEnabled(videoKey, true)
         }
     }
 

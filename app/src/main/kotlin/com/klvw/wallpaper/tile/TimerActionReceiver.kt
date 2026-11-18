@@ -128,27 +128,26 @@ class TimerActionReceiver : BroadcastReceiver() {
             shuffleHistoryManager: ShuffleHistoryManager,
             scheduleManager: ScheduleManager
         ) {
-            val (type, target) = keyToTypeTarget(key)
+            val screen = WallpaperTimerManager.normalizeKey(key)
+            val target = when (screen) {
+                WallpaperTimerManager.KEY_LOCK -> WallpaperTarget.LOCK
+                else -> WallpaperTarget.HOME
+            }
+            val isVideo = when (target) {
+                WallpaperTarget.LOCK -> prefs.lockIsVideo.first()
+                else -> prefs.homeIsVideo.first()
+            }
+            val type = if (isVideo) FolderType.VIDEO else FolderType.IMAGE
             val folderUri = scheduleManager.resolveFolderUri(target, type) ?: return
             val items = folderRepository.getItemsFromFolder(folderUri, type)
             val item = shuffleHistoryManager.pickNext(items, folderUri, type) ?: return
             wallpaperRepository.setWallpaper(item, target)
         }
 
-        fun keyToTypeTarget(key: String): Pair<FolderType, WallpaperTarget> = when (key) {
-            "home_image" -> FolderType.IMAGE to WallpaperTarget.HOME
-            "home_video" -> FolderType.VIDEO to WallpaperTarget.HOME
-            "lock_image" -> FolderType.IMAGE to WallpaperTarget.LOCK
-            "lock_video" -> FolderType.VIDEO to WallpaperTarget.LOCK
-            else -> throw IllegalArgumentException("Unknown timer key: $key")
-        }
-
-        private suspend fun intervalForKey(prefs: SettingsPreferences, key: String) = when (key) {
-            "home_image" -> prefs.homeImageTimerIntervalMin.first()
-            "home_video" -> prefs.homeVideoTimerIntervalMin.first()
-            "lock_image" -> prefs.lockImageTimerIntervalMin.first()
-            "lock_video" -> prefs.lockVideoTimerIntervalMin.first()
-            else -> 60
-        }
+        private suspend fun intervalForKey(prefs: SettingsPreferences, key: String) =
+            when (WallpaperTimerManager.normalizeKey(key)) {
+                WallpaperTimerManager.KEY_LOCK -> prefs.lockTimerIntervalMin.first()
+                else -> prefs.homeTimerIntervalMin.first()
+            }
     }
 }

@@ -125,24 +125,21 @@ class BtConfigServer(
     }
 
     private suspend fun buildTimerJson(): String {
-        val keys = listOf("home_image", "home_video", "lock_image", "lock_video")
+        val keys = listOf(
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_HOME,
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_LOCK
+        )
         val labels = mapOf(
-            "home_image" to "Home Image",
-            "home_video" to "Home Video",
-            "lock_image" to "Lock Image",
-            "lock_video" to "Lock Video"
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_HOME to "Home",
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_LOCK to "Lock"
         )
         val enabledMap = mapOf(
-            "home_image" to prefs.homeImageTimerEnabled.first(),
-            "home_video" to prefs.homeVideoTimerEnabled.first(),
-            "lock_image" to prefs.lockImageTimerEnabled.first(),
-            "lock_video" to prefs.lockVideoTimerEnabled.first()
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_HOME to prefs.homeTimerEnabled.first(),
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_LOCK to prefs.lockTimerEnabled.first()
         )
         val intervalMap = mapOf(
-            "home_image" to prefs.homeImageTimerIntervalMin.first(),
-            "home_video" to prefs.homeVideoTimerIntervalMin.first(),
-            "lock_image" to prefs.lockImageTimerIntervalMin.first(),
-            "lock_video" to prefs.lockVideoTimerIntervalMin.first()
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_HOME to prefs.homeTimerIntervalMin.first(),
+            com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_LOCK to prefs.lockTimerIntervalMin.first()
         )
         val paused = timerManager.paused.value
         val fireTimes = timerManager.nextFireTimes.value
@@ -162,18 +159,19 @@ class BtConfigServer(
     }
 
     private suspend fun handleTimerAction(key: String, action: String) {
+        val screen = com.klvw.wallpaper.tile.WallpaperTimerManager.normalizeKey(key)
         when (action) {
-            "pause"  -> timerManager.pause(key)
-            "resume" -> timerManager.resume(key)
+            "pause"  -> timerManager.pause(screen)
+            "resume" -> timerManager.resume(screen)
             "reset"  -> {
-                val intervalMin = when (key) {
-                    "home_image" -> prefs.homeImageTimerIntervalMin.first()
-                    "home_video" -> prefs.homeVideoTimerIntervalMin.first()
-                    "lock_image" -> prefs.lockImageTimerIntervalMin.first()
-                    "lock_video" -> prefs.lockVideoTimerIntervalMin.first()
+                val intervalMin = when (screen) {
+                    com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_HOME ->
+                        prefs.homeTimerIntervalMin.first()
+                    com.klvw.wallpaper.tile.WallpaperTimerManager.KEY_LOCK ->
+                        prefs.lockTimerIntervalMin.first()
                     else -> return
                 }
-                timerManager.scheduleAlarm(key, intervalMin)
+                timerManager.scheduleAlarm(screen, intervalMin)
             }
         }
     }

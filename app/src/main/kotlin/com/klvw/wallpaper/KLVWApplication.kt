@@ -103,7 +103,10 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
                                 AerLockStore.lock(ctx.applicationContext)
                             }
                             // P.o.L — pause timers whose "Pause on Lock" option is enabled
-                            val allKeys = listOf("home_image", "home_video", "lock_image", "lock_video")
+                            val allKeys = listOf(
+                                WallpaperTimerManager.KEY_HOME,
+                                WallpaperTimerManager.KEY_LOCK
+                            )
                             val toPause = allKeys.filter { key ->
                                 polEnabled(key) && timerIsEnabled(key) &&
                                 timerManager.paused.value[key] != true
@@ -170,16 +173,12 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
 
         appScope.launch {
             val enabledKeysFlow = combine(
-                prefs.homeImageTimerEnabled,
-                prefs.homeVideoTimerEnabled,
-                prefs.lockImageTimerEnabled,
-                prefs.lockVideoTimerEnabled
-            ) { hi, hv, li, lv ->
+                prefs.homeTimerEnabled,
+                prefs.lockTimerEnabled
+            ) { homeOn, lockOn ->
                 listOfNotNull(
-                    "home_image".takeIf { hi },
-                    "home_video".takeIf { hv },
-                    "lock_image".takeIf { li },
-                    "lock_video".takeIf { lv }
+                    WallpaperTimerManager.KEY_HOME.takeIf { homeOn },
+                    WallpaperTimerManager.KEY_LOCK.takeIf { lockOn }
                 )
             }
 
@@ -209,19 +208,15 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
         }
     }
 
-    private suspend fun polEnabled(key: String): Boolean = when (key) {
-        "home_image" -> prefs.homeImageTimerPauseOnLock.first()
-        "home_video" -> prefs.homeVideoTimerPauseOnLock.first()
-        "lock_image" -> prefs.lockImageTimerPauseOnLock.first()
-        "lock_video" -> prefs.lockVideoTimerPauseOnLock.first()
+    private suspend fun polEnabled(key: String): Boolean = when (WallpaperTimerManager.normalizeKey(key)) {
+        WallpaperTimerManager.KEY_HOME -> prefs.homeTimerPauseOnLock.first()
+        WallpaperTimerManager.KEY_LOCK -> prefs.lockTimerPauseOnLock.first()
         else -> false
     }
 
-    private suspend fun timerIsEnabled(key: String): Boolean = when (key) {
-        "home_image" -> prefs.homeImageTimerEnabled.first()
-        "home_video" -> prefs.homeVideoTimerEnabled.first()
-        "lock_image" -> prefs.lockImageTimerEnabled.first()
-        "lock_video" -> prefs.lockVideoTimerEnabled.first()
+    private suspend fun timerIsEnabled(key: String): Boolean = when (WallpaperTimerManager.normalizeKey(key)) {
+        WallpaperTimerManager.KEY_HOME -> prefs.homeTimerEnabled.first()
+        WallpaperTimerManager.KEY_LOCK -> prefs.lockTimerEnabled.first()
         else -> false
     }
 
@@ -248,12 +243,13 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
                     }
                     for (screen in screens) {
                         val type = if (wantVideo) FolderType.VIDEO else FolderType.IMAGE
-                        val uri = when {
-                            scheduleManager.isEnabled() || prefs.presetEnabled.first() ->
-                                scheduleManager.resolveFolderUri(screen, type)
-                            folderUri.isNotBlank() -> folderUri
-                            else -> scheduleManager.resolveFolderUri(screen, type)
-                        } ?: continue
+                        // Explicit folder only when preset/schedule are off; otherwise scheme stack wins.
+                        val uri = if (
+                            folderUri.isNotBlank() &&
+                            !prefs.presetEnabled.first() &&
+                            !scheduleManager.isEnabled()
+                        ) folderUri else scheduleManager.resolveFolderUri(screen, type)
+                            ?: continue
                         val item = shuffleHistoryManager.pickNext(
                             folderRepository.getItemsFromFolder(uri, type), uri, type
                         ) ?: continue
@@ -301,16 +297,11 @@ class KLVWApplication : Application(), SingletonImageLoader.Factory {
                     }
                     prefs.setAppEnabled(false)
                     if (prefs.pauseTimersOnGlobalOff.first()) {
-                        val keys = listOf("home_image", "home_video", "lock_image", "lock_video")
-                            .filter { key ->
-                                when (key) {
-                                    "home_image" -> prefs.homeImageTimerEnabled.first()
-                                    "home_video" -> prefs.homeVideoTimerEnabled.first()
-                                    "lock_image" -> prefs.lockImageTimerEnabled.first()
-                                    "lock_video" -> prefs.lockVideoTimerEnabled.first()
-                                    else -> false
-                                }
-                            }
+                        val keys = listOf(
+                            WallpaperTimerManager.KEY_HOME,
+                            WallpaperTimerManager.KEY_LOCK
+                        )
+                            .filter { key -> timerIsEnabled(key) }
                             .filter { key -> timerManager.paused.value[key] != true }
                         keys.forEach { key -> timerManager.pause(key) }
                         prefs.setGlobalOffPausedTimers(keys.toSet())

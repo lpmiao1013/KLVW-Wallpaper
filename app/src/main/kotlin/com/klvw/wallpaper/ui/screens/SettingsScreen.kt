@@ -790,14 +790,12 @@ private fun PujieWatchFaceSection(popupViewModel: KLVWPopupViewModel) {
 @Composable
 private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
     val context = LocalContext.current
-    val homeImage by popupViewModel.displayControlHomeImage.collectAsStateWithLifecycle()
-    val homeVideo by popupViewModel.displayControlHomeVideo.collectAsStateWithLifecycle()
-    val lockImage by popupViewModel.displayControlLockImage.collectAsStateWithLifecycle()
-    val lockVideo by popupViewModel.displayControlLockVideo.collectAsStateWithLifecycle()
+    val homeUnlock by popupViewModel.displayControlHome.collectAsStateWithLifecycle()
+    val lockUnlock by popupViewModel.displayControlLock.collectAsStateWithLifecycle()
     val resetHomeTimer by popupViewModel.displayControlResetHomeTimer.collectAsStateWithLifecycle()
     val resetLockTimer by popupViewModel.displayControlResetLockTimer.collectAsStateWithLifecycle()
-    val anyHomeEnabled = homeImage || homeVideo
-    val anyLockEnabled = lockImage || lockVideo
+    val anyHomeEnabled = homeUnlock
+    val anyLockEnabled = lockUnlock
 
     // Track permission state — re-evaluated on each recomposition (user may have just granted)
     var phoneStateGranted by remember { mutableStateOf(false) }
@@ -882,16 +880,14 @@ private fun DisplayControlSection(popupViewModel: KLVWPopupViewModel) {
         Text("解锁时 — 轮换壁纸", style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            "同一屏幕图片与视频只能开一个，避免互相覆盖。",
+            "按屏幕开关；解锁时自动跟随当前桌面/锁屏是图片还是视频，再按优先级取文件夹（预设＞时段＞指定＞默认）。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         listOf(
-            Triple("home_image", "桌面图片", homeImage),
-            Triple("home_video", "桌面视频", homeVideo),
-            Triple("lock_image", "锁屏图片", lockImage),
-            Triple("lock_video", "锁屏视频", lockVideo)
+            Triple("home", "桌面解锁轮换", homeUnlock),
+            Triple("lock", "锁屏解锁轮换", lockUnlock)
         ).forEach { (key, label, enabled) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1210,32 +1206,22 @@ private data class SettingsTimerRow(
 
 @Composable
 private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
-    val homeImageEnabled by popupViewModel.homeImageTimerEnabled.collectAsStateWithLifecycle()
-    val homeImageInterval by popupViewModel.homeImageTimerIntervalMin.collectAsStateWithLifecycle()
-    val homeVideoEnabled by popupViewModel.homeVideoTimerEnabled.collectAsStateWithLifecycle()
-    val homeVideoInterval by popupViewModel.homeVideoTimerIntervalMin.collectAsStateWithLifecycle()
-    val lockImageEnabled by popupViewModel.lockImageTimerEnabled.collectAsStateWithLifecycle()
-    val lockImageInterval by popupViewModel.lockImageTimerIntervalMin.collectAsStateWithLifecycle()
-    val lockVideoEnabled by popupViewModel.lockVideoTimerEnabled.collectAsStateWithLifecycle()
-    val lockVideoInterval by popupViewModel.lockVideoTimerIntervalMin.collectAsStateWithLifecycle()
-    val homeImagePol by popupViewModel.homeImageTimerPauseOnLock.collectAsStateWithLifecycle()
-    val homeVideoPol by popupViewModel.homeVideoTimerPauseOnLock.collectAsStateWithLifecycle()
-    val lockImagePol by popupViewModel.lockImageTimerPauseOnLock.collectAsStateWithLifecycle()
-    val lockVideoPol by popupViewModel.lockVideoTimerPauseOnLock.collectAsStateWithLifecycle()
+    val homeEnabled by popupViewModel.homeTimerEnabled.collectAsStateWithLifecycle()
+    val homeInterval by popupViewModel.homeTimerIntervalMin.collectAsStateWithLifecycle()
+    val lockEnabled by popupViewModel.lockTimerEnabled.collectAsStateWithLifecycle()
+    val lockInterval by popupViewModel.lockTimerIntervalMin.collectAsStateWithLifecycle()
+    val homePol by popupViewModel.homeTimerPauseOnLock.collectAsStateWithLifecycle()
+    val lockPol by popupViewModel.lockTimerPauseOnLock.collectAsStateWithLifecycle()
     val timerPaused by popupViewModel.timerPaused.collectAsStateWithLifecycle()
     val nextFireTimes by popupViewModel.timerNextFireTimes.collectAsStateWithLifecycle()
 
     val timers = listOf(
-        SettingsTimerRow("home_image", "桌面图片", homeImageEnabled, homeImageInterval),
-        SettingsTimerRow("home_video", "桌面视频", homeVideoEnabled, homeVideoInterval),
-        SettingsTimerRow("lock_image", "锁屏图片", lockImageEnabled, lockImageInterval),
-        SettingsTimerRow("lock_video", "锁屏视频", lockVideoEnabled, lockVideoInterval)
+        SettingsTimerRow("home", "桌面定时", homeEnabled, homeInterval),
+        SettingsTimerRow("lock", "锁屏定时", lockEnabled, lockInterval)
     )
     val pauseOnLock = mapOf(
-        "home_image" to homeImagePol,
-        "home_video" to homeVideoPol,
-        "lock_image" to lockImagePol,
-        "lock_video" to lockVideoPol
+        "home" to homePol,
+        "lock" to lockPol
     )
 
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -1254,10 +1240,10 @@ private fun TimerControlSettingsSection(popupViewModel: KLVWPopupViewModel) {
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-                Text(
-            "分别开关桌面/锁屏定时并设置间隔。同一屏幕图片与视频定时互斥，开一个会关掉另一个。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        Text(
+            "按屏幕开关定时；触发时自动跟随当前是图片还是视频，再按优先级取文件夹（预设＞时段＞指定＞默认）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         val activeTimers = timers.filter { it.enabled }

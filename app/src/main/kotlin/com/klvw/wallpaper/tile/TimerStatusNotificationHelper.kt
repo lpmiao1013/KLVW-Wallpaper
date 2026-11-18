@@ -132,13 +132,11 @@ object TimerStatusNotificationHelper {
         prefs: SettingsPreferences,
         timerManager: WallpaperTimerManager
     ) {
-        val allKeys = listOf("home_image", "home_video", "lock_image", "lock_video")
+        val allKeys = listOf(WallpaperTimerManager.KEY_HOME, WallpaperTimerManager.KEY_LOCK)
         val enabledKeys = allKeys.filter { key ->
             when (key) {
-                "home_image" -> prefs.homeImageTimerEnabled.first()
-                "home_video" -> prefs.homeVideoTimerEnabled.first()
-                "lock_image" -> prefs.lockImageTimerEnabled.first()
-                "lock_video" -> prefs.lockVideoTimerEnabled.first()
+                WallpaperTimerManager.KEY_HOME -> prefs.homeTimerEnabled.first()
+                WallpaperTimerManager.KEY_LOCK -> prefs.lockTimerEnabled.first()
                 else -> false
             }
         }
@@ -183,11 +181,9 @@ object TimerStatusNotificationHelper {
         }
     }
 
-    fun timerLabel(key: String) = when (key) {
-        "home_image" -> "桌面图片"
-        "home_video" -> "桌面视频"
-        "lock_image" -> "锁屏图片"
-        "lock_video" -> "锁屏视频"
+    fun timerLabel(key: String) = when (WallpaperTimerManager.normalizeKey(key)) {
+        WallpaperTimerManager.KEY_HOME -> "桌面定时"
+        WallpaperTimerManager.KEY_LOCK -> "锁屏定时"
         else -> key
     }
 

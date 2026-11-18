@@ -52,26 +52,25 @@ class WallpaperSchemeResolver @Inject constructor(
     suspend fun resolveFolder(target: WallpaperTarget, type: FolderType): ResolvedFolder? {
         if (target != WallpaperTarget.HOME && target != WallpaperTarget.LOCK) return null
 
-        if (prefs.presetEnabled.first()) {
+        // One DataStore snapshot for button flags + folder keys (avoid N× .first()).
+        val snap = prefs.snapshot()
+        if (snap.presetEnabled) {
             val uri = presetManager.resolveFolderUri(target, type) ?: return null
             return ResolvedFolder(uri, type, WallpaperScheme.PRESET)
         }
-
-        if (prefs.scheduleEnabled.first()) {
-            val groupId = prefs.scheduleActiveGroupId.first() ?: return null
-            val group = ScheduleGroup.listFromJson(prefs.scheduleGroupsJson.first())
+        if (snap.scheduleEnabled) {
+            val groupId = snap.scheduleActiveGroupId ?: return null
+            val group = ScheduleGroup.listFromJson(snap.scheduleGroupsJson)
                 .firstOrNull { it.id == groupId } ?: return null
             val rule = ScheduleMath.hit(group.rules, target, ScheduleMath.minuteOfDay()) ?: return null
             if (rule.media != type) return null
             return ResolvedFolder(rule.folderUri, type, WallpaperScheme.SCHEDULE)
         }
-
-        val tabbar = prefs.activeFolderUri(target, type).first()
+        val tabbar = snap.activeFolder(target, type)
         if (!tabbar.isNullOrBlank()) {
             return ResolvedFolder(tabbar, type, WallpaperScheme.TABBAR)
         }
-
-        val def = prefs.defaultFolderUri(target, type).first() ?: return null
+        val def = snap.defaultFolder(target, type) ?: return null
         return ResolvedFolder(def, type, WallpaperScheme.DEFAULT)
     }
 
@@ -79,9 +78,10 @@ class WallpaperSchemeResolver @Inject constructor(
         resolveFolder(target, type)?.uri
 
     private suspend fun hasAnyTabbar(): Boolean {
+        val snap = prefs.snapshot()
         for (t in listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)) {
             for (m in listOf(FolderType.IMAGE, FolderType.VIDEO)) {
-                if (!prefs.activeFolderUri(t, m).first().isNullOrBlank()) return true
+                if (!snap.activeFolder(t, m).isNullOrBlank()) return true
             }
         }
         return false
