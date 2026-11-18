@@ -603,8 +603,10 @@ private fun TimerControlOverlay(
         TimerRow("home", "桌面定时", homeEnabled, homeIntervalMin),
         TimerRow("lock", "锁屏定时", lockEnabled, lockIntervalMin)
     )
+    val anyTimerOn = homeEnabled || lockEnabled
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(anyTimerOn) {
+        if (!anyTimerOn) return@LaunchedEffect
         while (true) {
             kotlinx.coroutines.delay(1000)
             now = System.currentTimeMillis()

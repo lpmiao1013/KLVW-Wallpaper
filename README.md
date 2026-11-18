@@ -11,7 +11,7 @@
 | Live Wallpaper | Hardware-accelerated image and video rendering for home and lock screen |
 | Popup Menu | Floating overlay with fully configurable action buttons |
 | Quick Set Tile | Native QS tile that sets both screens in one tap |
-| Wallpaper Timers | Automatic timed rotation per target (home image, home video, lock image, lock video) |
+| Wallpaper Timers | Automatic timed rotation per screen (home / lock); follows current image or video type |
 | Display Control | Cycle to a new random wallpaper every time the screen is unlocked |
 | Kill Switch | Global disable that freezes all wallpaper changes with one tile tap |
 | Icon Color Control | Force status bar icons to dark or light regardless of wallpaper brightness |
@@ -117,7 +117,7 @@ The tile appears as **KLVW Quick Set** in your QS tile picker. Add it to your pa
 
 ### Configuration (in-app)
 
-Settings → **KLVW Quick Set Tile**
+Settings → **其他功能** → **KLVW Quick Set Tile**
 
 | Setting | Options |
 |---|---|
@@ -147,16 +147,14 @@ Automatically rotate wallpapers on a schedule. Timers survive device sleep (Alar
 
 Via the **Timer Control** popup item in the KLVW Popup Menu.
 
-### Per-Target Timers
+### Per-Screen Timers
 
-Four independent timers, each with its own enable switch, interval, and pause/resume control:
+Two timers (home / lock), each with enable, interval, and pause/resume. When a timer fires it follows the screen’s current media type (image or video) and resolves the folder by priority (preset → schedule → tabbar → default).
 
 | Timer | Target |
 |---|---|
-| Home Image | Home screen — cycles random images |
-| Home Video | Home screen — cycles random videos |
-| Lock Image | Lock screen — cycles random images |
-| Lock Video | Lock screen — cycles random videos |
+| Home | Home screen (current image or video) |
+| Lock | Lock screen (current image or video) |
 
 ### Intervals
 
@@ -212,13 +210,11 @@ Settings → **KLVW Display Control**
 
 #### On-Unlock Cycle Toggles
 
-Enable each target independently:
-- **Home Image** — cycles a random image to the home screen on unlock
-- **Home Video** — cycles a random video to the home screen on unlock
-- **Lock Image** — cycles a random image to the lock screen on unlock
-- **Lock Video** — cycles a random video to the lock screen on unlock
+Enable per screen:
+- **Home** — on unlock, cycle home wallpaper using the current home media type (image or video)
+- **Lock** — on unlock, cycle lock wallpaper using the current lock media type
 
-The source folder for each target is the corresponding default folder (set via the **All Folders** popup item or the per-target folder selectors).
+Folder resolution uses the same priority stack (preset → schedule → tabbar → default).
 
 #### Reset Timer on Unlock
 
@@ -333,12 +329,12 @@ KLVW registers a broadcast receiver for the action `com.klvw.wallpaper.SET_WALLP
 根目录 `version.properties`：
 
 ```properties
-VERSION_CODE=9
-VERSION_NAME=7.0.1
+VERSION_CODE=43
+VERSION_NAME=8.0.0
 ```
 
 - **VERSION_CODE**：每次 CI **正式包（release）** 构建前自动 +1
-- **VERSION_NAME**：同一次构建自动 **patch +1**（如 `7.0.1` → `7.0.2`）；major/minor 仍需手动改
+- **VERSION_NAME**：同一次构建自动 **patch +1**（如 `8.0.0` → `8.0.1`）；major/minor 仍需手动改
 - 改完后回写提交（信息带 `[skip ci]`，避免死循环）
 - debug 手动构建 **不会** 加版本号
 
