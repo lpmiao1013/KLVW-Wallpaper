@@ -1,20 +1,15 @@
 pluginManagement {
     repositories {
-        // Prefer Maven Central first so plugin transitive deps (e.g. gson) resolve
-        // without relying on Google's Android Maven (which does not host them).
+        // Prefer Maven Central first so plugin transitive deps (e.g. gson / Hilt)
+        // resolve without relying on Google's Android Maven (which does not host them).
         mavenCentral()
         google()
         gradlePluginPortal()
-    }
-    resolutionStrategy {
-        eachPlugin {
-            // Resolve Hilt via the real Maven artifact. The plugin-marker POM
-            // (com.google.dagger.hilt.android.gradle.plugin) intermittently fails
-            // on GitHub Actions even though Maven Central hosts 2.54+.
-            if (requested.id.id == "com.google.dagger.hilt.android") {
-                useModule("com.google.dagger:hilt-android-gradle-plugin:${requested.version}")
-            }
-        }
+        // Fallback mirrors when Maven Central is briefly unreachable on CI.
+        maven { url = uri("https://maven.aliyun.com/repository/central") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
     }
 }
 plugins {
@@ -27,6 +22,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/central") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
     }
 }
 
