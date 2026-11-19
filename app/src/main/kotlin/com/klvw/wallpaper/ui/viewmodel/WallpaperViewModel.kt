@@ -526,6 +526,12 @@ class WallpaperViewModel @Inject constructor(
         _state.update { it.copy(selectedItem = item) }
     }
 
+    /**
+     * Browse-only: changes the picker preview folder.
+     * Does NOT write 指定仓 — that happens when the user actually sets a wallpaper
+     * (see [rememberActiveFolderFromItem]), so merely opening/refreshing folder B
+     * cannot steal rotation away from folder A.
+     */
     fun selectFolder(folderUri: String?) {
         if (_state.value.isLoadingPreview) return
         if (isPresetDrivingUi()) {
@@ -538,8 +544,6 @@ class WallpaperViewModel @Inject constructor(
         }
         val tab = _state.value.mediaTab
         if (tab != MediaTab.IMAGE && tab != MediaTab.VIDEO) return
-        val target = screenTarget()
-        putSaved(target, tab, folderUri)
         _state.update {
             it.copy(
                 selectedFolderUri = folderUri,
@@ -549,9 +553,24 @@ class WallpaperViewModel @Inject constructor(
             )
         }
         loadPreviewItems(clearFirst = false)
-        viewModelScope.launch {
-            val type = if (tab == MediaTab.VIDEO) FolderType.VIDEO else FolderType.IMAGE
-            prefs.setActiveFolder(target, type, folderUri)
+    }
+
+    /** Persist 指定仓 from a wallpaper that was actually applied. */
+    private suspend fun rememberActiveFolderFromItem(
+        item: WallpaperItem,
+        target: WallpaperTarget
+    ) {
+        if (item.folderUri.isBlank()) return
+        if (item.type != FolderType.IMAGE && item.type != FolderType.VIDEO) return
+        val screens = when (target) {
+            WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
+            WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
+            else -> listOf(WallpaperTarget.HOME)
+        }
+        val tab = if (item.type == FolderType.VIDEO) MediaTab.VIDEO else MediaTab.IMAGE
+        for (screen in screens) {
+            putSaved(screen, tab, item.folderUri)
+            prefs.setActiveFolder(screen, item.type, item.folderUri)
         }
     }
 
@@ -587,6 +606,10 @@ class WallpaperViewModel @Inject constructor(
                     }
                 }
                 wallpaperRepository.setWallpaper(item, target)
+                // Only an actual set updates 指定仓 — browsing/refresh must not.
+                if (!isPresetDrivingUi() && !scheduleManager.isEnabled()) {
+                    rememberActiveFolderFromItem(item, target)
+                }
 
                 val homeNeeded = (target == WallpaperTarget.HOME || target == WallpaperTarget.BOTH)
                     && !wallpaperRepository.isHomeServiceActive()
