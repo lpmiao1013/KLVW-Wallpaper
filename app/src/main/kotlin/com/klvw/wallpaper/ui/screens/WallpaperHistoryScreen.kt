@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,8 @@ import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private enum class HistoryTypeTab { IMAGE, VIDEO }
 
 @Composable
 fun WallpaperHistorySettingsScreen(
@@ -51,7 +54,16 @@ fun WallpaperHistorySettingsScreen(
     var switching by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var authorizing by remember { mutableStateOf(false) }
+    var typeTab by remember { mutableStateOf(HistoryTypeTab.IMAGE) }
     val timeFmt = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()) }
+    val filteredEntries = remember(entries, typeTab) {
+        entries.filter { e ->
+            when (typeTab) {
+                HistoryTypeTab.VIDEO -> e.type == "video"
+                HistoryTypeTab.IMAGE -> e.type != "video" // image + static
+            }
+        }
+    }
 
     fun showResult(ok: Boolean, msg: String?) {
         resultIsError = !ok
@@ -364,7 +376,46 @@ fun WallpaperHistorySettingsScreen(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         )
 
-        if (entries.isEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceGlass)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            listOf(
+                HistoryTypeTab.IMAGE to "图片",
+                HistoryTypeTab.VIDEO to "视频"
+            ).forEach { (tab, label) ->
+                val selected = typeTab == tab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else Color.Transparent
+                        )
+                        .clickable(enabled = !selected) { typeTab = tab }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
+        }
+
+        if (filteredEntries.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -379,7 +430,12 @@ fun WallpaperHistorySettingsScreen(
                         modifier = Modifier.size(48.dp)
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text("暂无历史记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (entries.isEmpty()) "暂无历史记录"
+                        else if (typeTab == HistoryTypeTab.VIDEO) "暂无视频历史"
+                        else "暂无图片历史",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         } else {
@@ -388,7 +444,7 @@ fun WallpaperHistorySettingsScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(entries, key = { it.id }) { entry ->
+                items(filteredEntries, key = { it.id }) { entry ->
                     HistoryRow(
                         entry = entry,
                         timeText = timeFmt.format(Date(entry.timestamp)),
