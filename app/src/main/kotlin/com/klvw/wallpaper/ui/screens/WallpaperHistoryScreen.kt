@@ -3,26 +3,37 @@ package com.klvw.wallpaper.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import coil3.memory.MemoryCache
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.size.Scale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.prefs.WallpaperHistoryEntry
 import com.klvw.wallpaper.data.prefs.WallpaperHistoryStore
@@ -439,13 +450,17 @@ fun WallpaperHistorySettingsScreen(
                 }
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 110.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(filteredEntries, key = { it.id }) { entry ->
-                    HistoryRow(
+                    HistoryCard(
                         entry = entry,
                         timeText = timeFmt.format(Date(entry.timestamp)),
                         onOpen = { previewEntry = entry },
@@ -459,53 +474,110 @@ fun WallpaperHistorySettingsScreen(
 }
 
 @Composable
-private fun HistoryRow(
+private fun HistoryCard(
     entry: WallpaperHistoryEntry,
     timeText: String,
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
+    val fileUri = remember(entry.fileUri) {
+        runCatching { Uri.parse(entry.fileUri) }.getOrNull()
+    }
     val screenLabel = if (entry.target == "lock") "锁屏" else "桌面"
     val typeLabel = when (entry.type) {
         "video" -> "视频"
         "static" -> "静态"
         else -> "图片"
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceGlass)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                entry.displayName.ifBlank { "未命名" },
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                "$screenLabel · $typeLabel · ${entry.folderLabel.ifBlank { "文件夹" }}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                timeText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(9f / 16f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF2A2A2A))
+                .clickable(onClick = onOpen)
+        ) {
+            if (fileUri != null) {
+                AsyncImage(
+                    model = remember(entry.fileUri) {
+                        val cacheKey = "hist_${entry.fileUri}"
+                        ImageRequest.Builder(context)
+                            .data(fileUri)
+                            .size(360, 640)
+                            .scale(Scale.FILL)
+                            .memoryCachePolicy(CachePolicy.ENABLED)
+                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .memoryCacheKey(MemoryCache.Key(cacheKey))
+                            .diskCacheKey(cacheKey)
+                            .build()
+                    },
+                    contentDescription = entry.displayName,
+                    placeholder = remember { ColorPainter(Color(0xFF2A2A2A)) },
+                    error = remember { ColorPainter(Color(0xFF1A1A1A)) },
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (entry.type == "video") {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .size(18.dp)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(onClick = onDelete),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "删除源文件",
+                    tint = Color(0xFFFF8A80),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
-        IconButton(onClick = onDelete) {
-            Icon(
-                Icons.Default.Delete,
-                contentDescription = "删除源文件",
-                tint = MaterialTheme.colorScheme.error
-            )
-        }
+        Text(
+            entry.displayName.ifBlank { "未命名" },
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            "$screenLabel · $typeLabel",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            entry.folderLabel.ifBlank { "文件夹" },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            timeText,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
