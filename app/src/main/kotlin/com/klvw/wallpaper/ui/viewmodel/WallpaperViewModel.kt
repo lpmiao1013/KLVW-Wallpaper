@@ -123,8 +123,25 @@ class WallpaperViewModel @Inject constructor(
 ) : ViewModel() {
 
     val sharpnessLogs = sharpnessLogStore.entries
+
+    /**
+     * History list for UI. When folder-hide mode is on, entries from privacy-marked folders
+     * are omitted (same visibility rule as picker / folder manager). Store itself is unchanged.
+     */
     val wallpaperHistory: StateFlow<List<WallpaperHistoryEntry>> =
-        wallpaperHistoryStore.entries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        combine(
+            wallpaperHistoryStore.entries,
+            prefs.folderHideMode,
+            folderRepository.getMarkedFolders()
+        ) { entries, hideMode, marked ->
+            if (!hideMode) entries
+            else {
+                val hiddenUris = marked.mapTo(HashSet()) { it.uri }
+                entries.filter { e ->
+                    e.folderUri.isBlank() || e.folderUri !in hiddenUris
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _state = MutableStateFlow(WallpaperUiState())
     val state: StateFlow<WallpaperUiState> = _state.asStateFlow()
