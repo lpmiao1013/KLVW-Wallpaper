@@ -6,6 +6,16 @@ pluginManagement {
         google()
         gradlePluginPortal()
     }
+    resolutionStrategy {
+        eachPlugin {
+            // Resolve Hilt via the real Maven artifact. The plugin-marker POM
+            // (com.google.dagger.hilt.android.gradle.plugin) intermittently fails
+            // on GitHub Actions even though Maven Central hosts 2.54+.
+            if (requested.id.id == "com.google.dagger.hilt.android") {
+                useModule("com.google.dagger:hilt-android-gradle-plugin:${requested.version}")
+            }
+        }
+    }
 }
 plugins {
     // 1.0.0 shades its deps (gson etc.), avoiding separate classpath downloads that
