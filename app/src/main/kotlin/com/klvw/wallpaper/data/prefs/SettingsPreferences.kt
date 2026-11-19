@@ -915,6 +915,30 @@ class SettingsPreferences @Inject constructor(
         context.dataStore.edit { it[Keys.SCHEDULE_GROUPS_JSON] = json }
     }
 
+    /**
+     * After SAF re-auth returns a different tree URI for the same folder, rewrite stored references
+     * so presets / schedules / active folders keep working without manual reconfiguration.
+     */
+    suspend fun remapFolderUriReferences(oldUri: String, newUri: String) {
+        if (oldUri.isBlank() || newUri.isBlank() || oldUri == newUri) return
+        context.dataStore.edit { prefs ->
+            fun replKey(key: Preferences.Key<String>) {
+                val v = prefs[key] ?: return
+                if (v.contains(oldUri)) prefs[key] = v.replace(oldUri, newUri)
+            }
+            replKey(Keys.ACTIVE_IMAGE_FOLDER_URI)
+            replKey(Keys.ACTIVE_VIDEO_FOLDER_URI)
+            replKey(Keys.ACTIVE_HOME_IMAGE_FOLDER_URI)
+            replKey(Keys.ACTIVE_HOME_VIDEO_FOLDER_URI)
+            replKey(Keys.ACTIVE_LOCK_IMAGE_FOLDER_URI)
+            replKey(Keys.ACTIVE_LOCK_VIDEO_FOLDER_URI)
+            replKey(Keys.SCHEDULE_GROUPS_JSON)
+            replKey(Keys.PRESET_HOME_URI)
+            replKey(Keys.PRESET_LOCK_URI)
+            replKey(Keys.PRESET_HISTORY_JSON)
+        }
+    }
+
     suspend fun setPresetEnabled(enabled: Boolean) {
         context.dataStore.edit { it[Keys.PRESET_ENABLED] = enabled }
     }

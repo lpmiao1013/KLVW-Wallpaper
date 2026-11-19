@@ -64,6 +64,7 @@ import com.klvw.wallpaper.ui.theme.SurfaceGlass
 import com.klvw.wallpaper.ui.viewmodel.DeleteSourcePrep
 import com.klvw.wallpaper.ui.viewmodel.MediaTab
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
+import com.klvw.wallpaper.util.PermissionUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,11 +76,7 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { picked ->
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    picked, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: SecurityException) {}
+            PermissionUtils.persistDocumentPermission(context, picked)
             val displayName = picked.lastPathSegment?.substringAfterLast('/') ?: "图片"
             when (state.mediaTab) {
                 MediaTab.STATIC -> viewModel.addStaticImage(picked, displayName)
@@ -448,10 +445,14 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
             onSwitchAway = { toSwitch, onDone ->
                 viewModel.switchAwayFromSource(toSwitch, onDone)
             },
-            onDeleteSource = { toDelete ->
-                viewModel.deleteSourceFile(toDelete) { ok ->
+            onDeleteSource = { toDelete, onDone ->
+                viewModel.deleteSourceFile(toDelete) { ok, msg ->
+                    onDone(ok, msg)
                     if (ok) previewItem = null
                 }
+            },
+            onWriteReauthorize = { toAuth, tree, onDone ->
+                viewModel.onFolderWriteReauthorized(toAuth, tree, onDone)
             }
         )
     }
@@ -574,7 +575,9 @@ internal fun MediaPreviewDialog(
     onDismiss: () -> Unit,
     onPrepareDelete: (WallpaperItem, (DeleteSourcePrep) -> Unit) -> Unit,
     onSwitchAway: (WallpaperItem, (Boolean, String?) -> Unit) -> Unit,
-    onDeleteSource: (WallpaperItem) -> Unit
+    onDeleteSource: (WallpaperItem, (Boolean, String?) -> Unit) -> Unit,
+    onSetWallpaper: ((WallpaperItem) -> Unit)? = null,
+    onWriteReauthorize: ((WallpaperItem, Uri, (Boolean, String?, WallpaperItem?) -> Unit) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val config = LocalConfiguration.current
@@ -583,13 +586,48 @@ internal fun MediaPreviewDialog(
     val maxHeight = (config.screenHeightDp * 0.8f).dp
     val maxWidthPx = with(density) { maxWidth.roundToPx() }
     val maxHeightPx = with(density) { maxHeight.roundToPx() }
+    var workingItem by remember(item.uri) { mutableStateOf(item) }
     var videoPlaying by remember { mutableStateOf(item.type == FolderType.VIDEO) }
     var imageAspectRatio by remember(item.uri) { mutableStateOf<Float?>(null) }
     var startSavedHint by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showNeedSwitch by remember { mutableStateOf(false) }
+    var showNeedWrite by remember { mutableStateOf(false) }
     var blockMessage by remember { mutableStateOf<String?>(null) }
     var switching by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var authorizing by remember { mutableStateOf(false) }
+
+    fun handlePrep(prep: DeleteSourcePrep) {
+        when (prep) {
+            is DeleteSourcePrep.Blocked -> blockMessage = prep.message
+            is DeleteSourcePrep.NeedWritePermission -> showNeedWrite = true
+            is DeleteSourcePrep.NeedSwitchFirst -> showNeedSwitch = true
+            is DeleteSourcePrep.ReadyToConfirm -> showDeleteConfirm = true
+        }
+    }
+
+    val writeAuthLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { tree ->
+        authorizing = false
+        if (tree == null) return@rememberLauncherForActivityResult
+        val reauth = onWriteReauthorize
+        if (reauth == null) {
+            blockMessage = "无法完成写入授权"
+            return@rememberLauncherForActivityResult
+        }
+        reauth(workingItem, tree) { ok, err, remapped ->
+            if (!ok) {
+                blockMessage = err ?: "授权失败"
+                return@reauth
+            }
+            val next = remapped ?: workingItem
+            workingItem = next
+            showNeedWrite = false
+            onPrepareDelete(next) { handlePrep(it) }
+        }
+    }
 
     blockMessage?.let { msg ->
         AlertDialog(
@@ -604,6 +642,49 @@ internal fun MediaPreviewDialog(
             },
             confirmButton = {
                 TextButton(onClick = { blockMessage = null }) { Text("知道了") }
+            }
+        )
+    }
+
+    if (showNeedWrite) {
+        AlertDialog(
+            onDismissRequest = { if (!authorizing) showNeedWrite = false },
+            title = null,
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "删除源文件需要写入权限",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "系统不能静默提权。请点选原来的文件夹重新授权即可，预设与时段方案不用重配。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !authorizing && onWriteReauthorize != null,
+                    onClick = {
+                        authorizing = true
+                        val start = workingItem.folderUri.takeIf { it.isNotBlank() }
+                            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                        writeAuthLauncher.launch(start)
+                    }
+                ) { Text(if (authorizing) "授权中…" else "去授权") }
+            },
+            dismissButton = {
+                TextButton(enabled = !authorizing, onClick = { showNeedWrite = false }) {
+                    Text("取消")
+                }
             }
         )
     }
@@ -625,7 +706,7 @@ internal fun MediaPreviewDialog(
                     enabled = !switching,
                     onClick = {
                         switching = true
-                        onSwitchAway(item) { ok, err ->
+                        onSwitchAway(workingItem) { ok, err ->
                             switching = false
                             showNeedSwitch = false
                             if (ok) {
@@ -675,16 +756,26 @@ internal fun MediaPreviewDialog(
             },
             confirmButton = {
                 TextButton(
+                    enabled = !deleting,
                     onClick = {
-                        showDeleteConfirm = false
-                        onDeleteSource(item)
+                        deleting = true
+                        onDeleteSource(workingItem) { ok, msg ->
+                            deleting = false
+                            showDeleteConfirm = false
+                            if (!ok) {
+                                blockMessage = msg ?: "删除失败"
+                            }
+                        }
                     }
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        if (deleting) "删除中…" else "删除",
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
+                TextButton(enabled = !deleting, onClick = { showDeleteConfirm = false }) {
                     Text("取消")
                 }
             }
@@ -792,34 +883,51 @@ internal fun MediaPreviewDialog(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
-            // Delete source file (bottom-start) + close (top-end)
-            Box(
+            // Delete (+ optional set wallpaper) bottom-start; close top-end
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(8.dp)
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable {
-                        onPrepareDelete(item) { prep ->
-                            when (prep) {
-                                is DeleteSourcePrep.Blocked ->
-                                    blockMessage = prep.message
-                                is DeleteSourcePrep.NeedSwitchFirst ->
-                                    showNeedSwitch = true
-                                is DeleteSourcePrep.ReadyToConfirm ->
-                                    showDeleteConfirm = true
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.Center
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "删除源文件",
-                    tint = Color(0xFFFF8A80),
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable(enabled = !deleting) {
+                            onPrepareDelete(workingItem) { handlePrep(it) }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "删除源文件",
+                        tint = Color(0xFFFF8A80),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (onSetWallpaper != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .clickable {
+                                onSetWallpaper(workingItem)
+                                onDismiss()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Wallpaper,
+                            contentDescription = "设为壁纸",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
             Box(
                 modifier = Modifier

@@ -117,6 +117,21 @@ class WallpaperHistoryStore @Inject constructor(
         }
     }
 
+    /** Rewrite folderUri (and tree-based fileUri prefix) after SAF re-auth returns a new tree URI. */
+    suspend fun remapFolderUri(oldFolderUri: String, newFolderUri: String) {
+        if (oldFolderUri.isBlank() || newFolderUri.isBlank() || oldFolderUri == newFolderUri) return
+        context.wallpaperHistoryStore.edit { prefs ->
+            val list = parse(prefs[key].orEmpty()).map { e ->
+                if (e.folderUri != oldFolderUri) e
+                else e.copy(
+                    folderUri = newFolderUri,
+                    fileUri = e.fileUri.replace(oldFolderUri, newFolderUri)
+                )
+            }
+            prefs[key] = encode(list)
+        }
+    }
+
     private fun folderLabelOf(folderUri: String): String {
         if (folderUri.isBlank()) return "未知文件夹"
         return try {

@@ -12,6 +12,7 @@ import com.klvw.wallpaper.data.db.FolderEntity
 import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
+import com.klvw.wallpaper.util.PermissionUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -89,42 +90,90 @@ class FolderRepository @Inject constructor(
 
     /**
      * Permanently deletes the underlying source file (SAF / Aer document), not an app DB path.
-     * Returns true when the provider reported a successful delete.
      */
-    suspend fun deleteSourceFile(item: WallpaperItem): Boolean = withContext(Dispatchers.IO) {
-        val ok = when {
+    suspend fun deleteSourceFile(item: WallpaperItem): SourceDeleteResult = withContext(Dispatchers.IO) {
+        val result = when {
             item.uri.authority == AerDocumentsProvider.AUTHORITY -> {
                 // Aer provider has no deleteDocument; remove the app-private file directly.
                 try {
                     val docId = DocumentsContract.getDocumentId(item.uri)
                     val file = File(File(context.filesDir, "aer"), docId)
-                    file.isFile && file.delete()
-                } catch (_: Exception) {
-                    false
+                    when {
+                        !file.exists() -> SourceDeleteResult.Ok
+                        file.isFile && file.delete() -> SourceDeleteResult.Ok
+                        else -> SourceDeleteResult.Err("无法删除 Aer 内文件")
+                    }
+                } catch (e: Exception) {
+                    SourceDeleteResult.Err(e.message ?: "无法删除 Aer 内文件")
                 }
             }
-            else -> try {
-                DocumentsContract.deleteDocument(context.contentResolver, item.uri)
-            } catch (_: SecurityException) {
-                false
-            } catch (_: IllegalArgumentException) {
-                try {
-                    (context.contentResolver.delete(item.uri, null, null) ?: 0) > 0
-                } catch (_: Exception) {
-                    false
-                }
-            } catch (_: Exception) {
-                false
-            }
+            else -> deleteSafDocument(item)
         }
-        if (ok) {
+        if (result is SourceDeleteResult.Ok) {
             if (item.folderUri.isNotBlank()) invalidateItemsCache(item.folderUri, item.type)
             else invalidateItemsCache()
         }
-        ok
+        result
+    }
+
+    /** Whether SAF write is available for deleting this item (Aer always true). */
+    fun canWriteSource(item: WallpaperItem): Boolean {
+        if (item.uri.authority == AerDocumentsProvider.AUTHORITY) return true
+        val tree = item.folderUri.takeIf {
+            it.isNotBlank() && !it.startsWith("klvw-aer://")
+        }?.let { Uri.parse(it) }
+        if (tree != null) {
+            if (PermissionUtils.hasPersistedWrite(context, tree)) return true
+            if (PermissionUtils.ensurePersistedWrite(context, tree)) return true
+        }
+        if (PermissionUtils.hasPersistedWrite(context, item.uri)) return true
+        return PermissionUtils.ensurePersistedWrite(context, item.uri)
+    }
+
+    private fun deleteSafDocument(item: WallpaperItem): SourceDeleteResult {
+        val tree = item.folderUri.takeIf {
+            it.isNotBlank() && !it.startsWith("klvw-aer://")
+        }?.let { Uri.parse(it) }
+        if (tree != null) {
+            PermissionUtils.ensurePersistedWrite(context, tree)
+        } else {
+            PermissionUtils.ensurePersistedWrite(context, item.uri)
+        }
+        if (!canWriteSource(item)) {
+            return SourceDeleteResult.Err(
+                "无写入权限。请重新点选原文件夹授权后再删（预设/时段不用重配）。"
+            )
+        }
+        return try {
+            val deleted = DocumentsContract.deleteDocument(context.contentResolver, item.uri)
+            if (deleted) SourceDeleteResult.Ok
+            else SourceDeleteResult.Err("系统拒绝删除（文件可能受保护或只读）")
+        } catch (_: SecurityException) {
+            SourceDeleteResult.Err(
+                "无写入权限。请重新点选原文件夹授权后再删（预设/时段不用重配）。"
+            )
+        } catch (_: IllegalArgumentException) {
+            try {
+                val n = context.contentResolver.delete(item.uri, null, null) ?: 0
+                if (n > 0) SourceDeleteResult.Ok
+                else SourceDeleteResult.Err("删除失败（不支持的文档类型）")
+            } catch (e: Exception) {
+                SourceDeleteResult.Err(e.message ?: "删除失败")
+            }
+        } catch (e: Exception) {
+            SourceDeleteResult.Err(e.message ?: "删除失败")
+        }
     }
 
     suspend fun touchFolder(id: Long) = folderDao.updateLastUsed(id)
+
+    /** Point existing folder row at a newly granted tree URI (same folder, write re-auth). */
+    suspend fun remapFolderUri(oldUri: String, newUri: String) {
+        if (oldUri.isBlank() || newUri.isBlank() || oldUri == newUri) return
+        folderDao.updateUri(oldUri, newUri)
+        invalidateItemsCache(oldUri)
+        invalidateItemsCache(newUri)
+    }
 
     suspend fun findFolderByDisplayName(name: String, type: FolderType): FolderEntity? {
         val trimmed = name.trim()
@@ -267,4 +316,10 @@ class FolderRepository @Inject constructor(
                 ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
         } catch (_: Exception) { null }
     }
+}
+
+/** Outcome of deleting a wallpaper source file on disk / via SAF. */
+sealed class SourceDeleteResult {
+    data object Ok : SourceDeleteResult()
+    data class Err(val reason: String) : SourceDeleteResult()
 }

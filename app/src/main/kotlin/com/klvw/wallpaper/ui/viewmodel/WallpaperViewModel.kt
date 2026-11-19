@@ -2,8 +2,10 @@ package com.klvw.wallpaper.ui.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.klvw.wallpaper.util.PermissionUtils
 import com.klvw.wallpaper.aer.AerFolder
 import com.klvw.wallpaper.data.db.FolderEntity
 import com.klvw.wallpaper.data.model.FolderType
@@ -16,6 +18,7 @@ import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.prefs.WallpaperHistoryEntry
 import com.klvw.wallpaper.data.prefs.WallpaperHistoryStore
 import com.klvw.wallpaper.data.repository.FolderRepository
+import com.klvw.wallpaper.data.repository.SourceDeleteResult
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
 import com.klvw.wallpaper.preset.PresetManager
@@ -41,6 +44,8 @@ enum class MediaTab { IMAGE, STATIC, VIDEO }
 /** Result of checking whether a source file may be deleted from the preview dialog. */
 sealed class DeleteSourcePrep {
     data class Blocked(val message: String) : DeleteSourcePrep()
+    /** SAF only has read; UI should launch OpenDocumentTree to re-grant write (presets/schedules stay). */
+    data class NeedWritePermission(val item: WallpaperItem) : DeleteSourcePrep()
     data class NeedSwitchFirst(val item: WallpaperItem) : DeleteSourcePrep()
     data class ReadyToConfirm(val item: WallpaperItem) : DeleteSourcePrep()
 }
@@ -599,6 +604,11 @@ class WallpaperViewModel @Inject constructor(
         viewModelScope.launch { applyWallpaperItem(item, fromRandom = false) }
     }
 
+    /** Set wallpaper from an explicit item (e.g. history preview). */
+    fun setWallpaperItem(item: WallpaperItem) {
+        viewModelScope.launch { applyWallpaperItem(item, fromRandom = false) }
+    }
+
     /** Random pick from the current picker folder (or visible pool) and set as wallpaper. */
     fun setRandomWallpaper() {
         if (isPresetDrivingUi()) {
@@ -801,6 +811,10 @@ class WallpaperViewModel @Inject constructor(
      */
     fun prepareDeleteSource(item: WallpaperItem, onResult: (DeleteSourcePrep) -> Unit) {
         viewModelScope.launch {
+            if (!folderRepository.canWriteSource(item)) {
+                onResult(DeleteSourcePrep.NeedWritePermission(item))
+                return@launch
+            }
             val peers = peerItemsForDelete(item)
             if (peers.size <= 1) {
                 onResult(
@@ -813,6 +827,72 @@ class WallpaperViewModel @Inject constructor(
             } else {
                 onResult(DeleteSourcePrep.ReadyToConfirm(item))
             }
+        }
+    }
+
+    /**
+     * After user re-picks the folder via OpenDocumentTree (write grant).
+     * Same folder → presets/schedules keep working; URI string may be remapped if the system returned a new tree URI.
+     * [onDone] receives a possibly remapped [WallpaperItem] to continue delete with.
+     */
+    fun onFolderWriteReauthorized(
+        item: WallpaperItem,
+        grantedTree: Uri,
+        onDone: (ok: Boolean, error: String?, remapped: WallpaperItem?) -> Unit
+    ) {
+        viewModelScope.launch {
+            PermissionUtils.persistFolderPermission(context, grantedTree)
+            if (!PermissionUtils.hasPersistedWrite(context, grantedTree)) {
+                onDone(false, "未获得写入权限，请在系统弹窗中允许访问该文件夹", null)
+                return@launch
+            }
+            val oldFolder = item.folderUri
+            if (oldFolder.isBlank()) {
+                PermissionUtils.persistDocumentPermission(context, item.uri)
+                val ok = folderRepository.canWriteSource(item) ||
+                    PermissionUtils.hasPersistedWrite(context, grantedTree)
+                onDone(ok, if (ok) null else "授权后仍无法写入", item)
+                return@launch
+            }
+            val oldUri = Uri.parse(oldFolder)
+            val sameFolder = oldFolder == grantedTree.toString() ||
+                sameTreeDocument(oldUri, grantedTree)
+            if (!sameFolder) {
+                onDone(false, "请选择原来的那个文件夹（只需重新授权，不必重配预设/时段）", null)
+                return@launch
+            }
+            val newStr = grantedTree.toString()
+            val remapped = if (oldFolder != newStr) {
+                folderRepository.remapFolderUri(oldFolder, newStr)
+                prefs.remapFolderUriReferences(oldFolder, newStr)
+                wallpaperHistoryStore.remapFolderUri(oldFolder, newStr)
+                folderRepository.invalidateItemsCache()
+                item.copy(
+                    folderUri = newStr,
+                    uri = rebuildTreeDocumentUri(item.uri, grantedTree)
+                        ?: Uri.parse(item.uri.toString().replace(oldFolder, newStr))
+                )
+            } else {
+                item
+            }
+            onDone(true, null, remapped)
+        }
+    }
+
+    private fun sameTreeDocument(a: Uri, b: Uri): Boolean {
+        return try {
+            DocumentsContract.getTreeDocumentId(a) == DocumentsContract.getTreeDocumentId(b)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun rebuildTreeDocumentUri(fileUri: Uri, newTree: Uri): Uri? {
+        return try {
+            val docId = DocumentsContract.getDocumentId(fileUri)
+            DocumentsContract.buildDocumentUriUsingTree(newTree, docId)
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -886,50 +966,63 @@ class WallpaperViewModel @Inject constructor(
         }
     }
 
-    /** Deletes the on-disk / SAF source file, related caches, then refreshes the picker grid. */
-    fun deleteSourceFile(item: WallpaperItem, onDone: (Boolean) -> Unit = {}) {
+    /**
+     * Deletes the on-disk / SAF source file, related caches, then refreshes the picker grid.
+     * [onDone] receives (ok, message) so callers outside the wallpaper tab can show feedback.
+     */
+    fun deleteSourceFile(item: WallpaperItem, onDone: (Boolean, String?) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             // Re-check guards so callers cannot bypass UI.
+            if (!folderRepository.canWriteSource(item)) {
+                val msg = "无写入权限。请重新点选原文件夹授权后再删（预设/时段不用重配）。"
+                _state.update { it.copy(errorMessage = msg) }
+                onDone(false, msg)
+                return@launch
+            }
             val peers = peerItemsForDelete(item)
             if (peers.size <= 1) {
-                _state.update {
-                    it.copy(errorMessage = "至少需要一个文件，请先切换到其他资源后再删除。")
-                }
-                onDone(false)
+                val msg = "至少需要一个文件，请先切换到其他资源后再删除。"
+                _state.update { it.copy(errorMessage = msg) }
+                onDone(false, msg)
                 return@launch
             }
             if (isSourceCurrentlyApplied(item)) {
-                _state.update { it.copy(errorMessage = "请先切换资源") }
-                onDone(false)
+                val msg = "请先切换资源"
+                _state.update { it.copy(errorMessage = msg) }
+                onDone(false, msg)
                 return@launch
             }
-            val ok = folderRepository.deleteSourceFile(item)
-            if (ok) {
-                val uriKey = item.uri.toString()
-                VideoPlaybackPositions.clear(uriKey)
-                shuffleHistoryManager.forgetUri(uriKey)
-                wallpaperHistoryStore.removeByFileUri(uriKey)
-                if (item.type == FolderType.STATIC) {
-                    staticImageRepository.remove(item.uri)
+            when (val result = folderRepository.deleteSourceFile(item)) {
+                is SourceDeleteResult.Ok -> {
+                    val uriKey = item.uri.toString()
+                    VideoPlaybackPositions.clear(uriKey)
+                    shuffleHistoryManager.forgetUri(uriKey)
+                    wallpaperHistoryStore.removeByFileUri(uriKey)
+                    if (item.type == FolderType.STATIC) {
+                        staticImageRepository.remove(item.uri)
+                    }
+                    runCatching {
+                        val loader = SingletonImageLoader.get(context)
+                        val cacheKey = "${item.uri}_${item.lastModified}"
+                        loader.memoryCache?.remove(MemoryCache.Key(cacheKey))
+                        loader.diskCache?.remove(cacheKey)
+                    }
+                    _state.update { s ->
+                        s.copy(
+                            selectedItem = if (s.selectedItem?.uri == item.uri) null else s.selectedItem,
+                            previewItems = s.previewItems.filterNot { it.uri == item.uri }
+                        )
+                    }
+                    loadPreviewItems(clearFirst = false, forceRefresh = true)
+                    val msg = "源文件已删除"
+                    _state.update { it.copy(successMessage = msg) }
+                    onDone(true, msg)
                 }
-                runCatching {
-                    val loader = SingletonImageLoader.get(context)
-                    val cacheKey = "${item.uri}_${item.lastModified}"
-                    loader.memoryCache?.remove(MemoryCache.Key(cacheKey))
-                    loader.diskCache?.remove(cacheKey)
+                is SourceDeleteResult.Err -> {
+                    _state.update { it.copy(errorMessage = result.reason) }
+                    onDone(false, result.reason)
                 }
-                _state.update { s ->
-                    s.copy(
-                        selectedItem = if (s.selectedItem?.uri == item.uri) null else s.selectedItem,
-                        previewItems = s.previewItems.filterNot { it.uri == item.uri }
-                    )
-                }
-                loadPreviewItems(clearFirst = false, forceRefresh = true)
-                _state.update { it.copy(successMessage = "源文件已删除") }
-            } else {
-                _state.update { it.copy(errorMessage = "删除源文件失败（无权限或文件不可删）") }
             }
-            onDone(ok)
         }
     }
 

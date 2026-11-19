@@ -31,6 +31,9 @@ interface FolderDao {
     @Query("UPDATE folders SET hidden = :hidden WHERE id = :id")
     suspend fun setHidden(id: Long, hidden: Boolean)
 
+    @Query("UPDATE folders SET uri = :newUri WHERE uri = :oldUri")
+    suspend fun updateUri(oldUri: String, newUri: String): Int
+
     @Query("SELECT * FROM folders WHERE uri = :uri LIMIT 1")
     suspend fun findByUri(uri: String): FolderEntity?
 
