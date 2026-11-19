@@ -94,6 +94,37 @@ class ShuffleHistoryManager @Inject constructor(
         context.shuffleDataStore.edit { it.remove(key) }
     }
 
+    /** Drop a deleted file URI from every shuffle bucket (no-op if absent). */
+    suspend fun forgetUri(uriString: String) {
+        if (uriString.isBlank()) return
+        context.shuffleDataStore.edit { prefs ->
+            val keys = prefs.asMap().keys.toList()
+            for (key in keys) {
+                val raw = prefs[key] ?: continue
+                if (raw !is String) continue
+                val arr = try {
+                    JSONArray(raw)
+                } catch (_: Exception) {
+                    continue
+                }
+                var changed = false
+                val next = JSONArray()
+                for (i in 0 until arr.length()) {
+                    val s = arr.optString(i)
+                    if (s == uriString) {
+                        changed = true
+                    } else if (s.isNotEmpty()) {
+                        next.put(s)
+                    }
+                }
+                if (changed) {
+                    if (next.length() == 0) prefs.remove(key)
+                    else prefs[key] = next.toString()
+                }
+            }
+        }
+    }
+
     /**
      * Generate a stable DataStore key for a given [seed]+[typeName] combination.
      * Java's String.hashCode() is specification-mandated and deterministic across restarts.

@@ -9,7 +9,10 @@ import com.klvw.wallpaper.data.db.FolderEntity
 import com.klvw.wallpaper.data.model.FolderType
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.model.WallpaperTarget
+import coil3.SingletonImageLoader
+import coil3.memory.MemoryCache
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
+import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
@@ -17,6 +20,7 @@ import com.klvw.wallpaper.preset.PresetManager
 import com.klvw.wallpaper.schedule.ScheduleManager
 import com.klvw.wallpaper.scheme.WallpaperScheme
 import com.klvw.wallpaper.scheme.WallpaperSchemeResolver
+import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
 import com.klvw.wallpaper.tile.FolderHideTileService
 import com.klvw.wallpaper.tile.PresetTileService
 import com.klvw.wallpaper.tile.ScheduleTileService
@@ -31,6 +35,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 enum class MediaTab { IMAGE, STATIC, VIDEO }
+
+/** Result of checking whether a source file may be deleted from the preview dialog. */
+sealed class DeleteSourcePrep {
+    data class Blocked(val message: String) : DeleteSourcePrep()
+    data class NeedSwitchFirst(val item: WallpaperItem) : DeleteSourcePrep()
+    data class ReadyToConfirm(val item: WallpaperItem) : DeleteSourcePrep()
+}
 
 data class WallpaperUiState(
     val isLoading: Boolean = false,
@@ -99,7 +110,8 @@ class WallpaperViewModel @Inject constructor(
     private val scheduleManager: ScheduleManager,
     private val sharpnessLogStore: SharpnessLogStore,
     private val presetManager: PresetManager,
-    private val schemeResolver: WallpaperSchemeResolver
+    private val schemeResolver: WallpaperSchemeResolver,
+    private val shuffleHistoryManager: ShuffleHistoryManager
 ) : ViewModel() {
 
     val sharpnessLogs = sharpnessLogStore.entries
@@ -717,6 +729,145 @@ class WallpaperViewModel @Inject constructor(
 
     fun removeStaticImage(uri: Uri) {
         viewModelScope.launch { staticImageRepository.remove(uri) }
+    }
+
+    /**
+     * Gate before delete confirm:
+     * - last file in folder/path → [DeleteSourcePrep.Blocked]
+     * - currently applied on home/lock → [DeleteSourcePrep.NeedSwitchFirst]
+     * - otherwise → [DeleteSourcePrep.ReadyToConfirm]
+     */
+    fun prepareDeleteSource(item: WallpaperItem, onResult: (DeleteSourcePrep) -> Unit) {
+        viewModelScope.launch {
+            val peers = peerItemsForDelete(item)
+            if (peers.size <= 1) {
+                onResult(
+                    DeleteSourcePrep.Blocked("至少需要一个文件，请先切换到其他资源后再删除。")
+                )
+                return@launch
+            }
+            if (isSourceCurrentlyApplied(item)) {
+                onResult(DeleteSourcePrep.NeedSwitchFirst(item))
+            } else {
+                onResult(DeleteSourcePrep.ReadyToConfirm(item))
+            }
+        }
+    }
+
+    /** Rotate home/lock off [item], then caller may show the normal delete confirm. */
+    fun switchAwayFromSource(item: WallpaperItem, onDone: (ok: Boolean, error: String?) -> Unit) {
+        viewModelScope.launch {
+            val uriStr = item.uri.toString()
+            val homeUri = prefs.homeWallpaperUri.first()
+            val lockUri = prefs.lockWallpaperUri.first()
+            val screens = buildList {
+                if (homeUri == uriStr) add(WallpaperTarget.HOME)
+                if (lockUri == uriStr) add(WallpaperTarget.LOCK)
+            }
+            if (screens.isEmpty()) {
+                onDone(true, null)
+                return@launch
+            }
+            for (screen in screens) {
+                val next = pickReplacementForDelete(item) ?: run {
+                    onDone(false, "没有可切换的其他资源")
+                    return@launch
+                }
+                try {
+                    wallpaperRepository.setWallpaper(next, screen)
+                } catch (e: Exception) {
+                    onDone(false, e.message ?: "切换资源失败")
+                    return@launch
+                }
+            }
+            // Keep UI "使用中" badge in sync without waiting for prefs Flow.
+            _state.update {
+                it.copy(
+                    homeAppliedUri = prefs.homeWallpaperUri.first(),
+                    lockAppliedUri = prefs.lockWallpaperUri.first(),
+                    homeIsVideo = prefs.homeIsVideo.first(),
+                    lockIsVideo = prefs.lockIsVideo.first()
+                )
+            }
+            onDone(true, null)
+        }
+    }
+
+    private suspend fun isSourceCurrentlyApplied(item: WallpaperItem): Boolean {
+        val uriStr = item.uri.toString()
+        return prefs.homeWallpaperUri.first() == uriStr ||
+            prefs.lockWallpaperUri.first() == uriStr
+    }
+
+    private suspend fun peerItemsForDelete(item: WallpaperItem): List<WallpaperItem> {
+        return when (item.type) {
+            FolderType.STATIC -> _state.value.staticImages
+            FolderType.IMAGE, FolderType.VIDEO -> {
+                val folder = item.folderUri
+                if (folder.isNotBlank()) {
+                    folderRepository.getItemsFromFolder(folder, item.type)
+                } else {
+                    _state.value.previewItems.filter { it.type == item.type }
+                }
+            }
+        }
+    }
+
+    private suspend fun pickReplacementForDelete(item: WallpaperItem): WallpaperItem? {
+        val peers = peerItemsForDelete(item).filter { it.uri != item.uri }
+        if (peers.isEmpty()) return null
+        val folder = item.folderUri
+        return if (folder.isNotBlank() && item.type != FolderType.STATIC) {
+            shuffleHistoryManager.pickNext(peers, folder, item.type) ?: peers.random()
+        } else {
+            peers.random()
+        }
+    }
+
+    /** Deletes the on-disk / SAF source file, related caches, then refreshes the picker grid. */
+    fun deleteSourceFile(item: WallpaperItem, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            // Re-check guards so callers cannot bypass UI.
+            val peers = peerItemsForDelete(item)
+            if (peers.size <= 1) {
+                _state.update {
+                    it.copy(errorMessage = "至少需要一个文件，请先切换到其他资源后再删除。")
+                }
+                onDone(false)
+                return@launch
+            }
+            if (isSourceCurrentlyApplied(item)) {
+                _state.update { it.copy(errorMessage = "请先切换资源") }
+                onDone(false)
+                return@launch
+            }
+            val ok = folderRepository.deleteSourceFile(item)
+            if (ok) {
+                val uriKey = item.uri.toString()
+                VideoPlaybackPositions.clear(uriKey)
+                shuffleHistoryManager.forgetUri(uriKey)
+                if (item.type == FolderType.STATIC) {
+                    staticImageRepository.remove(item.uri)
+                }
+                runCatching {
+                    val loader = SingletonImageLoader.get(context)
+                    val cacheKey = "${item.uri}_${item.lastModified}"
+                    loader.memoryCache?.remove(MemoryCache.Key(cacheKey))
+                    loader.diskCache?.remove(cacheKey)
+                }
+                _state.update { s ->
+                    s.copy(
+                        selectedItem = if (s.selectedItem?.uri == item.uri) null else s.selectedItem,
+                        previewItems = s.previewItems.filterNot { it.uri == item.uri }
+                    )
+                }
+                loadPreviewItems(clearFirst = false, forceRefresh = true)
+                _state.update { it.copy(successMessage = "源文件已删除") }
+            } else {
+                _state.update { it.copy(errorMessage = "删除源文件失败（无权限或文件不可删）") }
+            }
+            onDone(ok)
+        }
     }
 
     fun clearMessage() {

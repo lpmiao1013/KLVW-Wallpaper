@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -58,6 +60,7 @@ import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.model.WallpaperTarget
 import com.klvw.wallpaper.service.renderer.VideoPlaybackPositions
 import com.klvw.wallpaper.ui.theme.SurfaceGlass
+import com.klvw.wallpaper.ui.viewmodel.DeleteSourcePrep
 import com.klvw.wallpaper.ui.viewmodel.MediaTab
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 
@@ -415,7 +418,21 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
     }
 
     previewItem?.let { item ->
-        MediaPreviewDialog(item = item, onDismiss = { previewItem = null })
+        MediaPreviewDialog(
+            item = item,
+            onDismiss = { previewItem = null },
+            onPrepareDelete = { toDelete, onResult ->
+                viewModel.prepareDeleteSource(toDelete, onResult)
+            },
+            onSwitchAway = { toSwitch, onDone ->
+                viewModel.switchAwayFromSource(toSwitch, onDone)
+            },
+            onDeleteSource = { toDelete ->
+                viewModel.deleteSourceFile(toDelete) { ok ->
+                    if (ok) previewItem = null
+                }
+            }
+        )
     }
 }
 
@@ -533,7 +550,10 @@ private fun MediaThumbnail(
 @Composable
 private fun MediaPreviewDialog(
     item: WallpaperItem,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onPrepareDelete: (WallpaperItem, (DeleteSourcePrep) -> Unit) -> Unit,
+    onSwitchAway: (WallpaperItem, (Boolean, String?) -> Unit) -> Unit,
+    onDeleteSource: (WallpaperItem) -> Unit
 ) {
     val context = LocalContext.current
     val config = LocalConfiguration.current
@@ -545,6 +565,110 @@ private fun MediaPreviewDialog(
     var videoPlaying by remember { mutableStateOf(item.type == FolderType.VIDEO) }
     var imageAspectRatio by remember(item.uri) { mutableStateOf<Float?>(null) }
     var startSavedHint by remember { mutableStateOf<String?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showNeedSwitch by remember { mutableStateOf(false) }
+    var blockMessage by remember { mutableStateOf<String?>(null) }
+    var switching by remember { mutableStateOf(false) }
+
+    blockMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { blockMessage = null },
+            title = null,
+            text = {
+                Text(
+                    msg,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { blockMessage = null }) { Text("知道了") }
+            }
+        )
+    }
+
+    if (showNeedSwitch) {
+        AlertDialog(
+            onDismissRequest = { if (!switching) showNeedSwitch = false },
+            title = null,
+            text = {
+                Text(
+                    "请先切换资源",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !switching,
+                    onClick = {
+                        switching = true
+                        onSwitchAway(item) { ok, err ->
+                            switching = false
+                            showNeedSwitch = false
+                            if (ok) {
+                                showDeleteConfirm = true
+                            } else {
+                                blockMessage = err ?: "切换资源失败"
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (switching) "切换中…" else "切换资源")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !switching,
+                    onClick = { showNeedSwitch = false }
+                ) { Text("取消") }
+            }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = null,
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "删除源文件，非应用内路径，请慎重操作！",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "请再次确认",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeleteSource(item)
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -647,7 +771,35 @@ private fun MediaPreviewDialog(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
-            // Close button always visible
+            // Delete source file (bottom-start) + close (top-end)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable {
+                        onPrepareDelete(item) { prep ->
+                            when (prep) {
+                                is DeleteSourcePrep.Blocked ->
+                                    blockMessage = prep.message
+                                is DeleteSourcePrep.NeedSwitchFirst ->
+                                    showNeedSwitch = true
+                                is DeleteSourcePrep.ReadyToConfirm ->
+                                    showDeleteConfirm = true
+                            }
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "删除源文件",
+                    tint = Color(0xFFFF8A80),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
