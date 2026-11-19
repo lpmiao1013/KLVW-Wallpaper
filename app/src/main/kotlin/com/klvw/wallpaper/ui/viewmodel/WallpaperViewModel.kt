@@ -13,6 +13,8 @@ import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
 import com.klvw.wallpaper.data.prefs.ShuffleHistoryManager
+import com.klvw.wallpaper.data.prefs.WallpaperHistoryEntry
+import com.klvw.wallpaper.data.prefs.WallpaperHistoryStore
 import com.klvw.wallpaper.data.repository.FolderRepository
 import com.klvw.wallpaper.data.repository.StaticImageRepository
 import com.klvw.wallpaper.data.repository.WallpaperRepository
@@ -111,10 +113,13 @@ class WallpaperViewModel @Inject constructor(
     private val sharpnessLogStore: SharpnessLogStore,
     private val presetManager: PresetManager,
     private val schemeResolver: WallpaperSchemeResolver,
-    private val shuffleHistoryManager: ShuffleHistoryManager
+    private val shuffleHistoryManager: ShuffleHistoryManager,
+    private val wallpaperHistoryStore: WallpaperHistoryStore
 ) : ViewModel() {
 
     val sharpnessLogs = sharpnessLogStore.entries
+    val wallpaperHistory: StateFlow<List<WallpaperHistoryEntry>> =
+        wallpaperHistoryStore.entries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _state = MutableStateFlow(WallpaperUiState())
     val state: StateFlow<WallpaperUiState> = _state.asStateFlow()
@@ -591,65 +596,122 @@ class WallpaperViewModel @Inject constructor(
 
     fun setWallpaper() {
         val item = _state.value.selectedItem ?: return
+        viewModelScope.launch { applyWallpaperItem(item, fromRandom = false) }
+    }
+
+    /** Random pick from the current picker folder (or visible pool) and set as wallpaper. */
+    fun setRandomWallpaper() {
+        if (isPresetDrivingUi()) {
+            _state.update { it.copy(errorMessage = "预设方案已启用，请先关闭预设再手动指定") }
+            return
+        }
+        if (isScheduleDrivingUi()) {
+            _state.update { it.copy(errorMessage = "时段方案已启用，请从当前时段文件夹选择") }
+            return
+        }
+        val tab = _state.value.mediaTab
+        if (tab != MediaTab.IMAGE && tab != MediaTab.VIDEO) return
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val target = _state.value.target
-                if (isPresetDrivingUi()) {
-                    _state.update {
-                        it.copy(isLoading = false, errorMessage = "预设方案已启用，请先关闭预设再手动指定")
-                    }
-                    return@launch
-                }
-                if (scheduleManager.isEnabled()) {
-                    val screens = when (target) {
-                        WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
-                        WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
-                        else -> listOf(WallpaperTarget.HOME)
-                    }
-                    for (screen in screens) {
-                        val rule = scheduleManager.currentRule(screen)
-                        if (rule == null || item.type != rule.media || item.folderUri != rule.folderUri) {
-                            _state.update {
-                                it.copy(isLoading = false, errorMessage = "时段方案已启用，请从当前时段文件夹选择")
+                val type = if (tab == MediaTab.VIDEO) FolderType.VIDEO else FolderType.IMAGE
+                val sel = _state.value.selectedFolderUri
+                val items = when {
+                    !sel.isNullOrBlank() ->
+                        folderRepository.getItemsFromFolder(sel, type)
+                    else -> {
+                        val cached = _state.value.previewItems.filter { it.type == type }
+                        if (cached.isNotEmpty()) cached
+                        else {
+                            val folders = if (type == FolderType.VIDEO) {
+                                _state.value.videoFolders
+                            } else {
+                                _state.value.imageFolders
                             }
-                            return@launch
+                            folders.flatMap { folderRepository.getItemsFromFolder(it.uri, type) }
                         }
                     }
                 }
-                wallpaperRepository.setWallpaper(item, target)
-                // Only an actual set updates 指定仓 — browsing/refresh must not.
-                if (!isPresetDrivingUi() && !scheduleManager.isEnabled()) {
-                    rememberActiveFolderFromItem(item, target)
+                if (items.isEmpty()) {
+                    _state.update { it.copy(isLoading = false, errorMessage = "当前文件夹没有可设置的文件") }
+                    return@launch
                 }
-
-                val homeNeeded = (target == WallpaperTarget.HOME || target == WallpaperTarget.BOTH)
-                    && !wallpaperRepository.isHomeServiceActive()
-                val lockNeeded = (target == WallpaperTarget.LOCK || target == WallpaperTarget.BOTH)
-                    && !wallpaperRepository.isLockServiceActive()
-
-                when {
-                    homeNeeded -> _state.update {
-                        it.copy(
-                            isLoading = false,
-                            promptActivateServiceClass = "com.klvw.wallpaper.service.KLVWallpaperService",
-                            pendingPromptLock = lockNeeded
-                        )
-                    }
-                    lockNeeded -> _state.update {
-                        it.copy(
-                            isLoading = false,
-                            promptActivateServiceClass = "com.klvw.wallpaper.service.KLVWallpaperServiceLock",
-                            pendingPromptLock = false
-                        )
-                    }
-                    else -> _state.update {
-                        it.copy(isLoading = false, successMessage = "Wallpaper set!")
-                    }
+                val picked = if (!sel.isNullOrBlank()) {
+                    shuffleHistoryManager.pickNext(items, sel, type) ?: items.random()
+                } else {
+                    shuffleHistoryManager.pickNextFromPool(items, type) ?: items.random()
                 }
+                applyWallpaperItem(picked, fromRandom = true)
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to set wallpaper") }
+                _state.update {
+                    it.copy(isLoading = false, errorMessage = e.message ?: "随机设置失败")
+                }
             }
+        }
+    }
+
+    private suspend fun applyWallpaperItem(item: WallpaperItem, fromRandom: Boolean) {
+        _state.update { it.copy(isLoading = true, errorMessage = null) }
+        try {
+            val target = _state.value.target
+            if (isPresetDrivingUi()) {
+                _state.update {
+                    it.copy(isLoading = false, errorMessage = "预设方案已启用，请先关闭预设再手动指定")
+                }
+                return
+            }
+            if (scheduleManager.isEnabled()) {
+                val screens = when (target) {
+                    WallpaperTarget.BOTH -> listOf(WallpaperTarget.HOME, WallpaperTarget.LOCK)
+                    WallpaperTarget.LOCK -> listOf(WallpaperTarget.LOCK)
+                    else -> listOf(WallpaperTarget.HOME)
+                }
+                for (screen in screens) {
+                    val rule = scheduleManager.currentRule(screen)
+                    if (rule == null || item.type != rule.media || item.folderUri != rule.folderUri) {
+                        _state.update {
+                            it.copy(isLoading = false, errorMessage = "时段方案已启用，请从当前时段文件夹选择")
+                        }
+                        return
+                    }
+                }
+            }
+            wallpaperRepository.setWallpaper(item, target)
+            // Only an actual set updates 指定仓 — browsing/refresh must not.
+            if (!isPresetDrivingUi() && !scheduleManager.isEnabled()) {
+                rememberActiveFolderFromItem(item, target)
+            }
+
+            val homeNeeded = (target == WallpaperTarget.HOME || target == WallpaperTarget.BOTH)
+                && !wallpaperRepository.isHomeServiceActive()
+            val lockNeeded = (target == WallpaperTarget.LOCK || target == WallpaperTarget.BOTH)
+                && !wallpaperRepository.isLockServiceActive()
+
+            when {
+                homeNeeded -> _state.update {
+                    it.copy(
+                        isLoading = false,
+                        promptActivateServiceClass = "com.klvw.wallpaper.service.KLVWallpaperService",
+                        pendingPromptLock = lockNeeded
+                    )
+                }
+                lockNeeded -> _state.update {
+                    it.copy(
+                        isLoading = false,
+                        promptActivateServiceClass = "com.klvw.wallpaper.service.KLVWallpaperServiceLock",
+                        pendingPromptLock = false
+                    )
+                }
+                else -> _state.update {
+                    it.copy(
+                        isLoading = false,
+                        successMessage = if (fromRandom) "已随机设为壁纸" else "Wallpaper set!",
+                        selectedItem = item
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to set wallpaper") }
         }
     }
 
@@ -846,6 +908,7 @@ class WallpaperViewModel @Inject constructor(
                 val uriKey = item.uri.toString()
                 VideoPlaybackPositions.clear(uriKey)
                 shuffleHistoryManager.forgetUri(uriKey)
+                wallpaperHistoryStore.removeByFileUri(uriKey)
                 if (item.type == FolderType.STATIC) {
                     staticImageRepository.remove(item.uri)
                 }

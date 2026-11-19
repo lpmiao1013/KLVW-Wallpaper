@@ -7,6 +7,7 @@ import com.klvw.wallpaper.data.model.VideoSharpnessMode
 import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.model.WallpaperTarget
 import com.klvw.wallpaper.data.prefs.SettingsPreferences
+import com.klvw.wallpaper.data.prefs.WallpaperHistoryStore
 import com.klvw.wallpaper.util.DisplayUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +20,8 @@ import javax.inject.Singleton
 class WallpaperRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val prefs: SettingsPreferences,
-    private val displayUtils: DisplayUtils
+    private val displayUtils: DisplayUtils,
+    private val historyStore: WallpaperHistoryStore
 ) {
     private val wallpaperManager = WallpaperManager.getInstance(context)
 
@@ -46,6 +48,8 @@ class WallpaperRepository @Inject constructor(
                 prefs.setLockWallpaper(item.uri.toString(), isVideo)
             }
         }
+        // All apply paths (picker / timer / unlock / QS / Tasker) share this entry point.
+        runCatching { historyStore.record(item, target) }
     }
 
     fun isHomeServiceActive(): Boolean =
