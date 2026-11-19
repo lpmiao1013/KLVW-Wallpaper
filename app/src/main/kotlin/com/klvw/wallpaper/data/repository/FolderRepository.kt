@@ -87,6 +87,43 @@ class FolderRepository @Inject constructor(
         }
     }
 
+    /**
+     * Permanently deletes the underlying source file (SAF / Aer document), not an app DB path.
+     * Returns true when the provider reported a successful delete.
+     */
+    suspend fun deleteSourceFile(item: WallpaperItem): Boolean = withContext(Dispatchers.IO) {
+        val ok = when {
+            item.uri.authority == AerDocumentsProvider.AUTHORITY -> {
+                // Aer provider has no deleteDocument; remove the app-private file directly.
+                try {
+                    val docId = DocumentsContract.getDocumentId(item.uri)
+                    val file = File(File(context.filesDir, "aer"), docId)
+                    file.isFile && file.delete()
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            else -> try {
+                DocumentsContract.deleteDocument(context.contentResolver, item.uri)
+            } catch (_: SecurityException) {
+                false
+            } catch (_: IllegalArgumentException) {
+                try {
+                    (context.contentResolver.delete(item.uri, null, null) ?: 0) > 0
+                } catch (_: Exception) {
+                    false
+                }
+            } catch (_: Exception) {
+                false
+            }
+        }
+        if (ok) {
+            if (item.folderUri.isNotBlank()) invalidateItemsCache(item.folderUri, item.type)
+            else invalidateItemsCache()
+        }
+        ok
+    }
+
     suspend fun touchFolder(id: Long) = folderDao.updateLastUsed(id)
 
     suspend fun findFolderByDisplayName(name: String, type: FolderType): FolderEntity? {
