@@ -2,7 +2,6 @@ package com.klvw.wallpaper.ui.screens
 
 import android.app.StatusBarManager
 import android.content.ComponentName
-import android.content.Intent
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.widget.Toast
@@ -65,12 +64,7 @@ fun PresetSettingsSection(viewModel: WallpaperViewModel) {
         val target = pickTarget
         pickTarget = null
         if (uri == null || target == null) return@rememberLauncherForActivityResult
-        try {
-            context.contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (_: SecurityException) {
-        }
+        com.klvw.wallpaper.util.PermissionUtils.persistDocumentPermission(context, uri)
         when (target) {
             "home" -> viewModel.setPresetHome(uri.toString(), state.presetHomeIsVideo, "file")
             "lock" -> viewModel.setPresetLock(uri.toString(), state.presetLockIsVideo, "file")

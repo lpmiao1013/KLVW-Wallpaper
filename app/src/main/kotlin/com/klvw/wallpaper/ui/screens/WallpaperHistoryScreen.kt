@@ -1,5 +1,8 @@
 package com.klvw.wallpaper.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.klvw.wallpaper.data.model.WallpaperItem
 import com.klvw.wallpaper.data.prefs.WallpaperHistoryEntry
 import com.klvw.wallpaper.data.prefs.WallpaperHistoryStore
 import com.klvw.wallpaper.ui.theme.SurfaceGlass
@@ -34,13 +38,47 @@ fun WallpaperHistorySettingsScreen(
     onBack: () -> Unit
 ) {
     val entries by viewModel.wallpaperHistory.collectAsStateWithLifecycle()
+    val uiState by viewModel.state.collectAsStateWithLifecycle()
     var previewEntry by remember { mutableStateOf<WallpaperHistoryEntry?>(null) }
     var blockMessage by remember { mutableStateOf<String?>(null) }
+    var resultMessage by remember { mutableStateOf<String?>(null) }
+    var resultIsError by remember { mutableStateOf(false) }
     var showNeedSwitch by remember { mutableStateOf(false) }
+    var showNeedWrite by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<WallpaperHistoryEntry?>(null) }
+    var pendingItem by remember { mutableStateOf<WallpaperItem?>(null) }
     var switching by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var authorizing by remember { mutableStateOf(false) }
     val timeFmt = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()) }
+
+    fun showResult(ok: Boolean, msg: String?) {
+        resultIsError = !ok
+        resultMessage = msg ?: if (ok) "源文件已删除" else "删除失败"
+    }
+
+    fun handlePrep(prep: DeleteSourcePrep) {
+        when (prep) {
+            is DeleteSourcePrep.Blocked -> {
+                pendingDelete = null
+                pendingItem = null
+                blockMessage = prep.message
+            }
+            is DeleteSourcePrep.NeedWritePermission -> {
+                pendingItem = prep.item
+                showNeedWrite = true
+            }
+            is DeleteSourcePrep.NeedSwitchFirst -> {
+                pendingItem = prep.item
+                showNeedSwitch = true
+            }
+            is DeleteSourcePrep.ReadyToConfirm -> {
+                pendingItem = prep.item
+                showDeleteConfirm = true
+            }
+        }
+    }
 
     fun requestDelete(entry: WallpaperHistoryEntry) {
         val item = entry.toWallpaperItem() ?: run {
@@ -48,15 +86,39 @@ fun WallpaperHistorySettingsScreen(
             return
         }
         pendingDelete = entry
-        viewModel.prepareDeleteSource(item) { prep ->
-            when (prep) {
-                is DeleteSourcePrep.Blocked -> {
-                    pendingDelete = null
-                    blockMessage = prep.message
-                }
-                is DeleteSourcePrep.NeedSwitchFirst -> showNeedSwitch = true
-                is DeleteSourcePrep.ReadyToConfirm -> showDeleteConfirm = true
+        pendingItem = item
+        viewModel.prepareDeleteSource(item, ::handlePrep)
+    }
+
+    val writeAuthLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { tree ->
+        authorizing = false
+        val item = pendingItem
+        if (tree == null || item == null) return@rememberLauncherForActivityResult
+        viewModel.onFolderWriteReauthorized(item, tree) { ok, err, remapped ->
+            if (!ok) {
+                blockMessage = err ?: "授权失败"
+                return@onFolderWriteReauthorized
             }
+            val next = remapped ?: item
+            pendingItem = next
+            showNeedWrite = false
+            viewModel.prepareDeleteSource(next, ::handlePrep)
+        }
+    }
+
+    // Surface wallpaper-tab messages while on this subpage (set wallpaper / delete).
+    LaunchedEffect(uiState.successMessage, uiState.errorMessage) {
+        uiState.successMessage?.let {
+            resultIsError = false
+            resultMessage = it
+            viewModel.clearMessage()
+        }
+        uiState.errorMessage?.let {
+            resultIsError = true
+            resultMessage = it
+            viewModel.clearMessage()
         }
     }
 
@@ -72,8 +134,72 @@ fun WallpaperHistorySettingsScreen(
         )
     }
 
+    resultMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { resultMessage = null },
+            text = {
+                Text(
+                    msg,
+                    color = if (resultIsError) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { resultMessage = null }) { Text("知道了") }
+            }
+        )
+    }
+
+    if (showNeedWrite) {
+        AlertDialog(
+            onDismissRequest = { if (!authorizing) showNeedWrite = false },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "删除源文件需要写入权限",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "系统不能静默提权。请点选原来的文件夹重新授权即可，预设与时段方案不用重配。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !authorizing && pendingItem != null,
+                    onClick = {
+                        authorizing = true
+                        val start = pendingItem?.folderUri?.takeIf { it.isNotBlank() }
+                            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                        writeAuthLauncher.launch(start)
+                    }
+                ) { Text(if (authorizing) "授权中…" else "去授权") }
+            },
+            dismissButton = {
+                TextButton(enabled = !authorizing, onClick = {
+                    showNeedWrite = false
+                    pendingDelete = null
+                    pendingItem = null
+                }) { Text("取消") }
+            }
+        )
+    }
+
     if (showNeedSwitch) {
-        val entry = pendingDelete
         AlertDialog(
             onDismissRequest = { if (!switching) showNeedSwitch = false },
             text = {
@@ -86,9 +212,9 @@ fun WallpaperHistorySettingsScreen(
             },
             confirmButton = {
                 TextButton(
-                    enabled = !switching && entry != null,
+                    enabled = !switching && pendingItem != null,
                     onClick = {
-                        val item = entry?.toWallpaperItem() ?: return@TextButton
+                        val item = pendingItem ?: return@TextButton
                         switching = true
                         viewModel.switchAwayFromSource(item) { ok, err ->
                             switching = false
@@ -96,6 +222,7 @@ fun WallpaperHistorySettingsScreen(
                             if (ok) showDeleteConfirm = true
                             else {
                                 pendingDelete = null
+                                pendingItem = null
                                 blockMessage = err ?: "切换资源失败"
                             }
                         }
@@ -106,6 +233,7 @@ fun WallpaperHistorySettingsScreen(
                 TextButton(enabled = !switching, onClick = {
                     showNeedSwitch = false
                     pendingDelete = null
+                    pendingItem = null
                 }) { Text("取消") }
             }
         )
@@ -113,7 +241,7 @@ fun WallpaperHistorySettingsScreen(
 
     if (showDeleteConfirm) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+            onDismissRequest = { if (!deleting) showDeleteConfirm = false },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -137,24 +265,37 @@ fun WallpaperHistorySettingsScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = !deleting,
                     onClick = {
-                        val entry = pendingDelete
-                        val item = entry?.toWallpaperItem()
-                        showDeleteConfirm = false
-                        if (item != null) {
-                            viewModel.deleteSourceFile(item) { ok ->
-                                if (ok) pendingDelete = null
-                            }
-                        } else {
+                        val item = pendingItem
+                        if (item == null) {
+                            showDeleteConfirm = false
                             pendingDelete = null
+                            return@TextButton
+                        }
+                        deleting = true
+                        viewModel.deleteSourceFile(item) { ok, msg ->
+                            viewModel.clearMessage()
+                            deleting = false
+                            showDeleteConfirm = false
+                            pendingDelete = null
+                            pendingItem = null
+                            if (ok) previewEntry = null
+                            showResult(ok, msg)
                         }
                     }
-                ) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                ) {
+                    Text(
+                        if (deleting) "删除中…" else "删除",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             },
             dismissButton = {
-                TextButton(onClick = {
+                TextButton(enabled = !deleting, onClick = {
                     showDeleteConfirm = false
                     pendingDelete = null
+                    pendingItem = null
                 }) { Text("取消") }
             }
         )
@@ -172,10 +313,22 @@ fun WallpaperHistorySettingsScreen(
                 onSwitchAway = { toSwitch, onDone ->
                     viewModel.switchAwayFromSource(toSwitch, onDone)
                 },
-                onDeleteSource = { toDelete ->
-                    viewModel.deleteSourceFile(toDelete) { ok ->
-                        if (ok) previewEntry = null
+                onDeleteSource = { toDelete, onDone ->
+                    viewModel.deleteSourceFile(toDelete) { ok, msg ->
+                        viewModel.clearMessage()
+                        onDone(ok, msg)
+                        if (ok) {
+                            previewEntry = null
+                            showResult(true, msg)
+                        }
                     }
+                },
+                onSetWallpaper = { toSet ->
+                    viewModel.setWallpaperItem(toSet)
+                    previewEntry = null
+                },
+                onWriteReauthorize = { toAuth, tree, onDone ->
+                    viewModel.onFolderWriteReauthorized(toAuth, tree, onDone)
                 }
             )
         } else {
