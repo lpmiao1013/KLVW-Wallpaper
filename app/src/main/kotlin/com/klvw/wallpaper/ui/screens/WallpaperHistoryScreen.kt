@@ -353,7 +353,12 @@ fun WallpaperHistorySettingsScreen(
             Text("壁纸历史", style = MaterialTheme.typography.titleMedium)
         }
         Text(
-            "最近 ${WallpaperHistoryStore.MAX_ENTRIES} 次设壁纸记录（解锁/定时/手动/随机），时间倒序。可快捷删除源文件。",
+            buildString {
+                append("最近 ${WallpaperHistoryStore.MAX_ENTRIES} 次设壁纸记录（解锁/定时/手动/随机），时间倒序。可快捷删除源文件。")
+                if (uiState.folderHideMode) {
+                    append(" 隐藏模式开启时，隐私标记文件夹的记录会一并隐藏。")
+                }
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
