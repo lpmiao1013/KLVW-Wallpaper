@@ -98,12 +98,12 @@ class ShuffleHistoryManager @Inject constructor(
     suspend fun forgetUri(uriString: String) {
         if (uriString.isBlank()) return
         context.shuffleDataStore.edit { prefs ->
-            val keys = prefs.asMap().keys.toList()
-            for (key in keys) {
-                val raw = prefs[key] ?: continue
-                if (raw !is String) continue
+            // asMap() yields Key<*>; rebuild typed Key<String> via name for writes.
+            for ((anyKey, value) in prefs.asMap()) {
+                if (value !is String) continue
+                val key = stringPreferencesKey(anyKey.name)
                 val arr = try {
-                    JSONArray(raw)
+                    JSONArray(value)
                 } catch (_: Exception) {
                     continue
                 }
