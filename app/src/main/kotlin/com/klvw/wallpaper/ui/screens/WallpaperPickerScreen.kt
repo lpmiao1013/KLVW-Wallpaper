@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -353,47 +354,67 @@ fun WallpaperPickerScreen(viewModel: WallpaperViewModel) {
         }
 
         // Action buttons
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(
-                onClick = {
-                    val mimes = if (state.mediaTab == MediaTab.VIDEO)
-                        arrayOf("video/*") else arrayOf("image/*")
-                    filePicker.launch(mimes)
-                },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    if (state.mediaTab == MediaTab.STATIC) "添加图片" else "从相册选择",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Button(
-                onClick = { viewModel.setWallpaper() },
-                modifier = Modifier.weight(1f),
-                enabled = state.selectedItem != null && !state.isLoading,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                if (state.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("设为壁纸", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                OutlinedButton(
+                    onClick = {
+                        val mimes = if (state.mediaTab == MediaTab.VIDEO)
+                            arrayOf("video/*") else arrayOf("image/*")
+                        filePicker.launch(mimes)
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        if (state.mediaTab == MediaTab.STATIC) "添加图片" else "从相册选择",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (state.mediaTab != MediaTab.STATIC) {
+                    OutlinedButton(
+                        onClick = { viewModel.setRandomWallpaper() },
+                        modifier = Modifier.weight(1f),
+                        enabled = tabsEnabled &&
+                            !state.isLoading &&
+                            !state.isLoadingPreview &&
+                            state.previewItems.isNotEmpty(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("随机设置", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Button(
+                    onClick = { viewModel.setWallpaper() },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.selectedItem != null && !state.isLoading,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (state.isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("设为壁纸", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
             if (state.mediaTab != MediaTab.STATIC) {
                 OutlinedButton(
                     onClick = { viewModel.refreshPreviewList() },
                     enabled = !state.isLoadingPreview && !state.isLoading,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     if (state.isLoadingPreview) {
@@ -548,7 +569,7 @@ private fun MediaThumbnail(
 }
 
 @Composable
-private fun MediaPreviewDialog(
+internal fun MediaPreviewDialog(
     item: WallpaperItem,
     onDismiss: () -> Unit,
     onPrepareDelete: (WallpaperItem, (DeleteSourcePrep) -> Unit) -> Unit,

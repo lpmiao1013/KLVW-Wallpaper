@@ -55,7 +55,7 @@ import com.klvw.wallpaper.data.model.VideoSharpnessMode
 import com.klvw.wallpaper.ui.theme.SurfaceGlass
 import com.klvw.wallpaper.ui.viewmodel.WallpaperViewModel
 
-private enum class SettingsSubPage { None, Appearance, Advanced, Other }
+private enum class SettingsSubPage { None, Appearance, Advanced, Other, History }
 
 @Composable
 fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewModel) {
@@ -93,6 +93,13 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
         SettingsSubPage.Other -> {
             OtherFeaturesSettingsScreen(
                 popupViewModel = popupViewModel,
+                onBack = { subPage = SettingsSubPage.None }
+            )
+            return
+        }
+        SettingsSubPage.History -> {
+            WallpaperHistorySettingsScreen(
+                viewModel = viewModel,
                 onBack = { subPage = SettingsSubPage.None }
             )
             return
@@ -172,6 +179,12 @@ fun SettingsScreen(viewModel: WallpaperViewModel, popupViewModel: KLVWPopupViewM
 
         SettingsGroupLabel("更多")
         SettingsSection(title = "入口") {
+            SettingsNavEntry(
+                icon = Icons.Default.History,
+                title = "壁纸历史",
+                subtitle = "最近设壁纸记录，可快捷删除源文件",
+                onClick = { subPage = SettingsSubPage.History }
+            )
             SettingsNavEntry(
                 icon = Icons.Default.Palette,
                 title = "外观设置",
